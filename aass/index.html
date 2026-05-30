@@ -85,7 +85,7 @@
             
             <h2>Abstract</h2>
             <p>
-                SignSGD is a powerful optimization algorithm that applies a hard $\pm 1$ clip to optimizer updates. However, it suffers from several practical limitations: its momentum remains susceptible to gradient outliers, the updates lack meaningful variance near zero, and it inherently lacks variance or confidence acceleration. In this post, we propose two effective techniques that resolve these issues: 
+                SignSGD is a powerful optimization algorithm that applies a hard +-1 clip to optimizer updates. However, it suffers from several practical limitations: its momentum remains susceptible to gradient outliers, the updates lack meaningful variance near zero, and it inherently lacks variance or confidence acceleration. In this post, we propose two effective techniques that resolve these issues: 
             </p>
             <ol>
                 <li><strong>Normalization-then-momentum</strong>: Transforms momentum into a variance tracker of sign-flip probabilities.</li>
@@ -94,7 +94,7 @@
 
             <h2>Introduction</h2>
             <p>
-                In the realm of deep learning optimization, memory and communication bottlenecks are ever-present. SignSGD was introduced to tackle these challenges by quantizing gradients to their signs, transmitting and applying only a single bit ($\pm 1$) per parameter. It is celebrated for its communication efficiency and its theoretical robustness against extreme gradient scaling.
+                In the realm of deep learning optimization, memory and communication bottlenecks are ever-present. SignSGD was introduced to tackle these challenges by quantizing gradients to their signs, transmitting and applying only a single bit (+-1) per parameter. It is celebrated for its communication efficiency and its theoretical robustness against extreme gradient scaling.
             </p>
             <p>
                 However, when deployed in the real world, optimization usually requires momentum to achieve stable and fast convergence. The standard way of marrying momentum with SignSGD often breaks the very scale-invariance the algorithm was designed to protect. If the optimizer encounters a sudden, massive gradient outlier, the moving average of the gradients gets completely distorted. Furthermore, standard sign updates struggle to distinguish between low-confidence (noisy) directions and high-confidence (consistent) directions. 
@@ -105,7 +105,7 @@
 
             <h2>The Scale-Invariance Paradox in Momentum</h2>
             <p>
-                SignSGD is known to be scale-invariant because it forces any input into a discrete $\pm 1$ output. Usually, it is paired with momentum for smoother, faster convergence.
+                SignSGD is known to be scale-invariant because it forces any input into a discrete +-1 output. Usually, it is paired with momentum for smoother, faster convergence.
             </p>
             <p>
                 However, <em>momentum itself is not scale-invariant</em>. It is directly affected by the magnitude of incoming gradients. If the optimizer encounters even one massive gradient outlier, the momentum becomes heavily inflated for many steps to come. Theoretically, an outlier takes roughly $1 / (1-\beta)$ steps to decay. This reintroduces the exact bias and scaling vulnerability that SignSGD was supposed to mitigate in the first place, making it difficult—if not impossible—to utilize long-term momentum effectively.
@@ -127,7 +127,7 @@
                 By doing this, the momentum becomes a strict tracker of the proportion and variance of the sign flips. Because the inputs to the moving average are now strictly bounded to $\{-1, 1\}$, the momentum itself is naturally bounded to $[-1, 1]$.
             </p>
             <ul>
-                <li>If the gradient direction is <strong>consistent</strong>, the momentum averages out towards $\pm 1$ (resulting in maximum, confident updates).</li>
+                <li>If the gradient direction is <strong>consistent</strong>, the momentum averages out towards +-1 (resulting in maximum, confident updates).</li>
                 <li>If the gradient is <strong>flipping or noisy</strong>, the momentum averages out to $0$ (resulting in a zeroed or heavily damped update).</li>
             </ul>
             <p>
