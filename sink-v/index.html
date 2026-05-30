@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Zero-Overhead Adaptive Preconditioning via Sinkhorn Geometry.">
+  <title>Sink-V — Zero-Overhead Variance</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lora:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <script>
+    MathJax = {
+      tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']], processEscapes: true },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg:          #0c0f16;
+      --surface:     #111620;
+      --surface2:    #181e2a;
+      --border:      #22293a;
+      --border2:     #2e3848;
+      --text:        #d8e4f0;
+      --muted:       #6d7e94;
+      --dim:         #3d4d5e;
+      --accent:      #b084e6;
+      --accent-l:    #cba6f7;
+      --accent-glow: rgba(176,132,230,.14);
+      --blue:        #5b9cf6;
+      --blue-dim:    rgba(91,156,246,.1);
+      --green:       #4ade80;
+      --red:         #f87171;
+      --mono:        'JetBrains Mono', 'Courier New', monospace;
+      --serif:       'Lora', Georgia, serif;
+      --display:     'Playfair Display', Georgia, serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--serif);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1.05rem;
+      line-height: 1.9;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 50px;
+      background: rgba(12,15,22,.93);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 1.75rem;
+      padding: 0 2rem;
+    }
+    .nav-brand {
+      font-family: var(--mono); font-size: .78rem; font-weight: 500;
+      color: var(--accent); text-decoration: none; letter-spacing: .08em;
+      flex-shrink: 0;
+    }
+    .nav-links { display: flex; gap: 1.5rem; list-style: none; overflow-x: auto; }
+    .nav-links a {
+      font-family: var(--mono); font-size: .68rem; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--muted); text-decoration: none;
+      transition: color .18s; white-space: nowrap;
+    }
+    .nav-links a:hover { color: var(--accent-l); }
+
+    /* ── LAYOUT ── */
+    .wrap { max-width: 820px; margin: 0 auto; padding: 0 2rem; }
+
+    /* ── HEADER ── */
+    header { padding: 110px 0 3.5rem; border-bottom: 1px solid var(--border); }
+
+    .wip-badge {
+      display: inline-flex; align-items: center; gap: .45em;
+      font-family: var(--mono); font-size: .62rem; font-weight: 500;
+      letter-spacing: .14em; text-transform: uppercase;
+      color: var(--accent-l);
+      border: 1px solid var(--accent);
+      border-radius: 3px; padding: 2px 9px; margin-bottom: 1.4rem;
+    }
+    .wip-badge::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent-l);
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+    h1 {
+      font-family: var(--display);
+      font-size: clamp(1.9rem, 5vw, 3.1rem);
+      font-weight: 700; line-height: 1.15;
+      color: var(--text); margin-bottom: .4rem;
+    }
+    .paper-tag {
+      font-family: var(--mono); font-size: .82rem;
+      color: var(--accent); letter-spacing: .18em; margin-bottom: 2rem;
+    }
+    .author-block { margin-top: 1.75rem; }
+    .author { font-family: var(--display); font-style: italic; font-size: 1.05rem; }
+    .affil {
+      font-family: var(--mono); font-size: .68rem;
+      color: var(--muted); letter-spacing: .05em; margin-top: .2rem;
+    }
+    sup { color: var(--accent); font-size: .7em; }
+
+    /* ── SECTIONS ── */
+    section { margin: 4rem 0; }
+    h2 {
+      font-family: var(--display); font-size: 1.55rem; font-weight: 600;
+      color: var(--text); margin-bottom: 1.4rem;
+      padding-top: 1rem; border-top: 1px solid var(--border);
+    }
+    h2 .sn { color: var(--accent); font-size: .88em; margin-right: .45em; }
+    h3 {
+      font-family: var(--display); font-size: 1.1rem; font-weight: 600;
+      color: var(--muted); margin: 2.2rem 0 1rem;
+    }
+    p { margin-bottom: 1.2rem; }
+
+    /* ── ABSTRACT ── */
+    .abstract-box {
+      margin: 2.5rem 0;
+      padding: 2rem 2.4rem;
+      background: var(--surface);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 6px 6px 0;
+    }
+    .box-label {
+      font-family: var(--mono); font-size: .64rem; font-weight: 500;
+      text-transform: uppercase; letter-spacing: .16em;
+      color: var(--accent); margin-bottom: .9rem;
+    }
+
+    /* ── MATH BLOCKS ── */
+    .mathblock {
+      margin: 1.8rem 0; padding: 1.4rem 1.8rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; overflow-x: auto; text-align: center;
+    }
+    .mathblock.highlight {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+    }
+    .mathblock.blue-hl {
+      border-color: rgba(91,156,246,.3);
+      background: var(--blue-dim);
+    }
+
+    /* ── PROOF STEPS ── */
+    .proof-step {
+      margin: 1.1rem 0; padding-left: 1.4rem;
+      border-left: 2px solid var(--border2);
+    }
+    .proof-label {
+      font-family: var(--mono); font-size: .65rem; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--muted); margin-bottom: .3rem;
+    }
+
+    /* ── CALLOUT ── */
+    .callout {
+      margin: 1.8rem 0; padding: 1.15rem 1.5rem;
+      background: var(--accent-glow);
+      border: 1px solid rgba(176,132,230,.28);
+      border-radius: 6px; font-size: .97rem;
+    }
+    .callout strong { color: var(--accent-l); }
+
+    /* ── ALGO BOX ── */
+    .algo-box { margin: 2rem 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .algo-head {
+      background: var(--surface2); padding: .6rem 1.3rem;
+      font-family: var(--mono); font-size: .7rem;
+      color: var(--accent); letter-spacing: .1em; text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .algo-body {
+      font-family: var(--mono); font-size: .84rem; line-height: 2;
+      padding: 1.4rem 1.6rem; background: var(--surface); color: var(--text);
+      overflow-x: auto;
+    }
+    .c { color: var(--muted); }
+    .kw { color: var(--accent-l); }
+    .hi-r { color: var(--red); }
+    .hi-g { color: var(--green); }
+    .hi-b { color: var(--blue); }
+    .step-n { color: var(--accent); user-select: none; margin-right: .5em; }
+
+    /* ── PROPERTY LIST ── */
+    .prop-list {
+      margin: 1.5rem 0; padding: 1.4rem 1.8rem;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    }
+    .prop-list li {
+      list-style: none; padding-left: 1.6em; position: relative;
+      margin-bottom: .25rem;
+    }
+    .prop-list li::before {
+      content: '→'; position: absolute; left: 0; color: var(--accent);
+    }
+
+    /* ── CHARTS ── */
+    .chart-wrap {
+      margin: 3rem 0; padding: 1.4rem 1.5rem;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      width: 100%;
+    }
+    .chart-title {
+      font-family: var(--mono); font-size: .7rem; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--muted); margin-bottom: .5rem;
+    }
+    .chart-sub {
+      font-size: .8rem; color: var(--dim); line-height: 1.5; margin-bottom: 1rem;
+    }
+    .chart-canvas { position: relative; height: 320px; width: 100%; }
+
+    /* ── CODE INLINE ── */
+    code {
+      font-family: var(--mono); font-size: .87em;
+      background: var(--surface2); color: var(--blue);
+      padding: .13em .4em; border-radius: 3px;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      margin-top: 5rem; padding: 2.5rem 0 4rem;
+      border-top: 1px solid var(--border);
+    }
+    .fn {
+      font-family: var(--mono); font-size: .72rem;
+      color: var(--muted); line-height: 1.9;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 620px) {
+      .wrap { padding: 0 1.2rem; }
+      nav   { padding: 0 1.2rem; gap: 1rem; }
+      .abstract-box { padding: 1.4rem; }
+      .algo-body { font-size: .76rem; }
+      .chart-canvas { height: 260px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-brand">SINK-V</a>
+  <ul class="nav-links">
+    <li><a href="#abstract">Abstract</a></li>
+    <li><a href="#sinkgd">Standard SinkGD</a></li>
+    <li><a href="#ntm">NtM Concept</a></li>
+    <li><a href="#sink-v-math">SINK-V Math</a></li>
+    <li><a href="#geometry">Geometry</a></li>
+    <li><a href="#algo">Implementation</a></li>
+  </ul>
+</nav>
+
+<div class="wrap">
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header>
+  <div class="wip-badge">Work in Progress</div>
+  <h1>Zero-Overhead Adaptive Preconditioning via Sinkhorn Geometry</h1>
+  <div class="paper-tag">SINK-V</div>
+  <div class="author-block">
+    <div class="author">Korata Hiu<sup>*</sup></div>
+    <div class="affil"><sup>*</sup> nickname — adv_optm dev</div>
+  </div>
+</header>
+
+<!-- ══════════════ ABSTRACT ══════════════ -->
+<section id="abstract">
+  <div class="abstract-box">
+    <div class="box-label">Abstract</div>
+    <p><strong>SinkGD</strong> is an optimization algorithm that iteratively balances noise and signal by geometrically preconditioning gradient rows and columns to a uniform norm. While it effectively prevents vanishing or exploding updates across channels, standard SinkGD fundamentally lacks an adaptive variance mechanism to dampen noisy dimensions—a critical mechanism for stable convergence.</p>
+    <p>In this post, we propose two techniques to introduce precise variance preconditioning to SinkGD with zero memory overhead. First, we define <strong>Normalization-then-Momentum (NtM)</strong>, a structural shift that applies Sinkhorn normalization <em>before</em> momentum accumulation. Second, building strictly upon NtM's geometrical constraints, we introduce <strong>Sinkhorn Implicit Variance (SINK-V)</strong>. By guaranteeing that all incoming gradients lie on a unit hypersphere, we prove that exact, spatially-aware variance can be extracted dynamically from the momentum buffer's norm. This yields robust adaptivity without allocating any explicit trackers.</p>
+  </div>
+</section>
+
+<!-- ══════════════ INTRODUCTION / SINKGD ══════════════ -->
+<section id="sinkgd">
+  <h2><span class="sn">§ 0</span> Standard SinkGD & The Missing Variance</h2>
+
+  <p>
+    Standard <strong>SinkGD</strong> introduces an iterative, geometric structural row and column pre-conditioning method designed to balance noise and signal propagation dynamically across network dimensions.
+  </p>
+  <p>
+    By calculating rank-1 diagonal pre-conditioning factors on-the-fly, the algorithm ensures equitable distribution of energy and guarantees that every row and column consistently contributes to the network’s learning process. 
+  </p>
+  <p>
+    In a traditional SinkGD implementation, the optimizer accumulates standard gradients into a momentum buffer, and then applies the Sinkhorn normalization to that buffer to compute the final update:
+  </p>
+
+  <div class="mathblock">
+    $$ \mathbf{m}_t = \beta \mathbf{m}_{t-1} + (1 - \beta) \mathbf{g}_t $$
+    $$ \Delta \mathbf{w}_t = \text{Sinkhorn}(\mathbf{m}_t) $$
+  </div>
+
+  <div class="algo-box">
+    <div class="algo-head">Algorithm — Standard SinkGD</div>
+    <div class="algo-body">
+      <div><span class="c">// 1. Accumulate raw gradient into momentum</span></div>
+      <div>m_t.lerp_(grad, 1 - beta)</div>
+      <br>
+      <div><span class="c">// 2. Apply Sinkhorn preconditioning to momentum</span></div>
+      <div>update = apply_sr_sinkhorn(m_t, iters=5)</div>
+      <br>
+      <div><span class="c">// 3. Apply update</span></div>
+      <div>param.sub_(update * lr)</div>
+    </div>
+  </div>
+
+  <p>In deep learning, scaling updates inversely to their variance allows an optimizer to take safely large steps in consistent directions, while aggressively dampening steps in noisy ones. <strong>Standard SinkGD lacks this mechanism.</strong> Because the Sinkhorn operator is the final step before the update, every row and column is forced to have an identical structural norm, destroying any magnitude-based confidence metric.</p>
+
+</section>
+
+<!-- ══════════════ NTM ══════════════ -->
+<section id="ntm">
+  <h2><span class="sn">§ 1</span> Normalization-then-Momentum (NtM)</h2>
+
+  <p>To solve this, our first proposal is a simple but structural reordering of operations called <strong>Normalization-then-Momentum (NtM)</strong>. Instead of normalizing the momentum buffer, we normalize the raw gradient <em>first</em>, and accumulate these normalized geometries into the momentum buffer.</p>
+
+  <div class="mathblock">
+    $$ \hat{\mathbf{g}}_t = \text{Sinkhorn}(\mathbf{g}_t) $$
+    $$ \mathbf{m}_t = \beta \mathbf{m}_{t-1} + (1 - \beta) \hat{\mathbf{g}}_t $$
+    $$ \Delta \mathbf{w}_t = \mathbf{m}_t $$
+  </div>
+
+  <div class="algo-box">
+    <div class="algo-head">Algorithm — Normalization-then-Momentum (NtM)</div>
+    <div class="algo-body">
+      <div><span class="c">// 1. Apply Sinkhorn to the incoming raw gradient</span></div>
+      <div>g_norm = apply_sr_sinkhorn(grad, iters=5)</div>
+      <br>
+      <div><span class="c">// 2. Accumulate normalized gradient into momentum</span></div>
+      <div>m_t.lerp_(g_norm, 1 - beta)</div>
+      <br>
+      <div><span class="c">// 3. Apply momentum as the update</span></div>
+      <div>param.sub_(m_t * lr)</div>
+    </div>
+  </div>
+
+  <p>This reordering is crucial. By enforcing the Sinkhorn constraint on $\mathbf{g}_t$ directly, we guarantee that the root mean square (RMS) energy of every incoming gradient row and column is strictly $1.0$. As these bounded vectors are exponentially averaged into $\mathbf{m}_t$, the magnitude of $\mathbf{m}_t$ organically shrinks when the gradient directions are noisy, and grows towards $1.0$ when directions are consistent. This sets the mathematical foundation for SINK-V.</p>
+</section>
+
+<!-- ══════════════ MATH SINK-V ══════════════ -->
+<section id="sink-v-math">
+  <h2><span class="sn">§ 2</span> The Mathematical Proof (SINK-V)</h2>
+
+  <p>We now establish <strong>Sinkhorn Implicit Variance (SINK-V)</strong>. Let $\hat{\mathbf{g}}_t \in \mathbb{R}^d$ be a Sinkhorn-normalized gradient row at step $t$ under the NtM regime. Let $\mathbf{m}_t$ be the momentum buffer for that row, acting as the expected value: $\mathbf{m}_t \approx \mathbb{E}[\hat{\mathbf{g}}_t]$.</p>
+
+  <p>We wish to find the true spatial variance $V$ of the normalized gradient around its momentum:</p>
+
+  <div class="proof-step">
+    <div class="proof-label">Definition of Variance</div>
+    $$V = \mathbb{E}_{\text{time}} \left[ \frac{1}{d} \sum_{j=1}^{d} (\hat{\mathbf{g}}_{t,j} - \mathbf{m}_{t,j})^2 \right]$$
+  </div>
+
+  <div class="proof-step">
+    <div class="proof-label">Expanding the square</div>
+    $$V = \mathbb{E}_{\text{time}} \left[ \frac{1}{d} \sum_{j=1}^{d} (\hat{\mathbf{g}}_{t,j}^2 - 2 \hat{\mathbf{g}}_{t,j} \mathbf{m}_{t,j} + \mathbf{m}_{t,j}^2) \right]$$
+  </div>
+
+  <div class="proof-step">
+    <div class="proof-label">Applying the Sinkhorn Constraint (RMS = 1.0)</div>
+    Because of NtM Sinkhorn normalization, the "total energy" of the row is structurally fixed: $\frac{1}{d} \sum \hat{\mathbf{g}}_{t,j}^2 = 1$. Substituting this and distributing the expectation:
+    $$V = 1 - 2 \left( \frac{1}{d} \sum_{j=1}^{d} \mathbf{m}_{t,j} \mathbb{E}[\hat{\mathbf{g}}_{t,j}] \right) + \frac{1}{d} \sum_{j=1}^{d} \mathbf{m}_{t,j}^2$$
+  </div>
+
+  <div class="proof-step">
+    <div class="proof-label">Substituting the Momentum Mean</div>
+    Since $\mathbf{m}_t$ is the expected value of $\hat{\mathbf{g}}_t$, we replace $\mathbb{E}[\hat{\mathbf{g}}_{t,j}]$ with $\mathbf{m}_{t,j}$:
+    $$V = 1 - 2 \left( \frac{1}{d} \sum_{j=1}^{d} \mathbf{m}_{t,j}^2 \right) + \frac{1}{d} \sum_{j=1}^{d} \mathbf{m}_{t,j}^2$$
+  </div>
+
+  <div class="mathblock highlight">
+    <div class="box-label" style="margin-bottom:.7rem;">Exact Implicit Row Variance</div>
+    $$V_{\text{row}} = 1 - \frac{1}{d} \sum_{j=1}^{d} \mathbf{m}_{t,j}^2$$
+  </div>
+
+  <p>This reveals a profound property: The expected variance of the gradient is an exact function of the spatial mean of the <em>squared momentum elements</em>. We extract the variance dynamically from the momentum buffer that we already track, with zero explicit variance state.</p>
+</section>
+
+<!-- ══════════════ GEOMETRY ══════════════ -->
+<section id="geometry">
+  <h2><span class="sn">§ 3</span> The Geometric Concept</h2>
+
+  <p>We can visualize this exact equality using basic geometry.</p>
+  
+  <p>Because NtM Sinkhorn Normalization enforces an RMS norm of 1, every incoming gradient vector $\hat{\mathbf{g}}_t$ is forced to live on the surface of a $d$-dimensional hypersphere of radius $R = \sqrt{d}$.</p>
+
+  <p>The momentum buffer $\mathbf{m}_t$ is the exponentially-weighted average of these surface vectors. By Jensen's Inequality, $\mathbf{m}_t$ will always fall <strong>inside</strong> the hypersphere. By the Pythagorean theorem of expected values, the relationship between the origin, the momentum, and the gradient surface is fixed:</p>
+
+  <div class="mathblock blue-hl">
+    $$\text{Signal}^2 + \text{Variance}^2 = \text{Total Energy}^2$$
+    $$||\mathbf{m}||_{\text{RMS}}^2 + V = 1.0 \qquad \implies \qquad V = 1.0 - ||\mathbf{m}||_{\text{RMS}}^2$$
+  </div>
+
+  <div class="callout">
+    <strong>Mathematical safety guarantee:</strong> Because it is geometrically impossible for the average of vectors on a unit hypersphere to exceed an RMS norm of 1, `1.0 - mean(m^2)` is mathematically guaranteed to be $\ge 0$. There is no risk of negative variances destabilizing the optimizer.
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-title">Fig. 1 — Geometric Constraint</div>
+    <div class="chart-sub">Because Total Energy (RMS) is bounded to 1.0, as the Signal (Momentum squared) increases, Variance must decrease exactly proportionally.</div>
+    <div class="chart-canvas"><canvas id="chart-pythagoras"></canvas></div>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-title">Fig. 2 — Update Magnitude Scaling & atan2 Bounding</div>
+    <div class="chart-sub">Comparing Pure NtM vs. SINK-V Preconditioning. Using <code>atan2</code> with the $4/\pi$ multiplier safely non-linearizes the update, bounding max output exactly to $[-2, 2]$.</div>
+    <div class="chart-canvas"><canvas id="chart-scaling"></canvas></div>
+  </div>
+
+</section>
+
+<!-- ══════════════ ALGORITHM ══════════════ -->
+<section id="algo">
+  <h2><span class="sn">§ 4</span> The Implementation</h2>
+
+  <p>In standard adaptive optimizers like Adam, the update is computed using simple division: $\mathbf{m} / \sqrt{v}$. This division is notoriously unstable when variance approaches zero, requiring hyperparameter tuning of a small $\epsilon$ denominator to prevent explosion.</p>
+
+  <p>In SINK-V, we replace division entirely with the 2-argument arctangent: $\text{atan2}(\mathbf{m}, \sqrt{v})$. Because $\mathbf{m}$ and $v$ are geometrically strictly bound, $\text{atan2}$ cleanly scales confident signals while bounding the raw maximum step mathematically to $\pm \pi/2$. By multiplying the output by $4/\pi$, we map the effective update perfectly to a bounded $[-2, 2]$ range. This guarantees absolute numerical stability—zero division errors, and no $\epsilon$ tuning</p>
+
+  <div class="algo-box">
+    <div class="algo-head">Algorithm — Full NtM + SINK-V Optimizer Step</div>
+    <div class="algo-body">
+      <div><span class="c">// 1. Normalization-then-Momentum (NtM)</span></div>
+      <div>g_norm = apply_sr_sinkhorn(grad, iters=5)</div>
+      <div>m_t.lerp_(g_norm, 1 - beta)</div>
+      <br>
+      <div><span class="c">// 2. SINK-V: Compute the squared momentum buffer</span></div>
+      <div>m_2d_sq = m_t.view(m_t.shape[0], -1).square()</div>
+      <br>
+      <div><span class="c">// 3. SINK-V: Extract mathematically exact spatial variance (Row & Col)</span></div>
+      <div>vt_row = (<span class="kw">1.0</span> - m_2d_sq.mean(dim=-1)).clamp_min_(1e-30)</div>
+      <div>vt_col = (<span class="kw">1.0</span> - m_2d_sq.mean(dim=-2)).clamp_min_(1e-30)</div>
+      <br>
+      <div><span class="c">// 4. Apply geometrically bounded variance preconditioning</span></div>
+      <div><span class="c">// We replace standard division (m / sqrt(v)) with atan2.</span></div>
+      <div><span class="c">// Multiplying by 4/pi scales the maximum update exactly to [-2, 2].</span></div>
+      <div>denom = torch.sqrt(vt_row.view(-1, 1) * vt_col.view(1, -1))</div>
+      <div>update = torch.atan2(m_t, denom).mul_(<span class="kw">4</span> / math.pi)</div>
+      <br>
+      <div><span class="c">// 5. Update weights</span></div>
+      <div>param.sub_(update * lr)</div>
+    </div>
+  </div>
+
+  <h3>System Advantages</h3>
+  <ul class="prop-list">
+    <li><strong>Zero Extra Optimizer State:</strong> The variance is inferred instantly from the already-existing momentum <code>m_t</code>. No additional VRAM is allocated for variance tracking.</li>
+    <li><strong>Computational Elegance:</strong> The operation requires just a single square and reduction, bypassing the continuous moving average calculations required by Adam.</li>
+    <li><strong>Unconditionally Bounded:</strong> By employing $\text{atan2}$ coupled with the $4/\pi$ multiplier, the optimizer inherently restricts updates to a $[-2, 2]$ envelope, completely bypassing the instability of adaptive division.</li>
+  </ul>
+</section>
+
+<!-- ══════════════ FOOTER ══════════════ -->
+<footer>
+  <div class="fn">
+    <div>† Handwritten. Grammar-corrected by AI, with self-review by the author.</div>
+    <div style="margin-top:.4rem; color:var(--dim)">SINK-V · adv_optm dev · Work in Progress</div>
+  </div>
+</footer>
+
+</div><!-- .wrap -->
+
+<!-- ══════════════ CHARTS ══════════════ -->
+<script>
+(function () {
+  /* ── shared theme ── */
+  const T = {
+    gridColor:   'rgba(255,255,255,0.045)',
+    tickColor:   '#3d4d5e',
+    tickFont:    { family: "'JetBrains Mono', monospace", size: 10 },
+    legendFont:  { family: "'JetBrains Mono', monospace", size: 11 },
+    tooltip: {
+      backgroundColor: '#111620', titleColor: '#d8e4f0',
+      bodyColor: '#6d7e94', borderColor: '#22293a', borderWidth: 1
+    }
+  };
+
+  function baseOpts(xTitle, yTitle, yMin, yMax) {
+    return {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: {
+        legend: { labels: { color: T.tickColor, font: T.legendFont, boxWidth: 14, padding: 14 } },
+        tooltip: T.tooltip
+      },
+      scales: {
+        x: {
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont, maxTicksLimit: 10 },
+          title: { display: !!xTitle, text: xTitle, color: T.tickColor, font: T.tickFont }
+        },
+        y: {
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: !!yTitle, text: yTitle, color: T.tickColor, font: T.tickFont },
+          ...(yMin !== undefined ? { min: yMin } : {}),
+          ...(yMax !== undefined ? { max: yMax } : {})
+        }
+      }
+    };
+  }
+
+  /* ─────────────────────────────────────────
+     Chart 1 — Pythagorean geometry Constraint (V = 1 - m^2)
+  ───────────────────────────────────────── */
+  const N = 100;
+  const sigSqVals = Array.from({ length: N }, (_, i) => i / (N - 1));
+
+  const pythagorasData = sigSqVals.map(x => ({
+    x: +x.toFixed(4),
+    y: +(1 - x).toFixed(4)
+  }));
+
+  new Chart(document.getElementById('chart-pythagoras'), {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'V = 1 - ||m||²',
+          data: pythagorasData,
+          borderColor: '#b084e6', backgroundColor: 'rgba(176,132,230,.07)',
+          fill: { target: 'origin', above: 'rgba(176,132,230,.07)' },
+          borderWidth: 2.5, pointRadius: 0,
+          showLine: true, tension: 0
+        }
+      ]
+    },
+    options: {
+      ...baseOpts('Signal (mean(m²))', 'Variance (V)', 0, 1),
+      scales: {
+        x: {
+          type: 'linear', min: 0, max: 1,
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Signal: mean(m²)', color: T.tickColor, font: T.tickFont }
+        },
+        y: {
+          type: 'linear', min: 0, max: 1,
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Variance: V', color: T.tickColor, font: T.tickFont }
+        }
+      }
+    }
+  });
+
+  /* ─────────────────────────────────────────
+     Chart 2 — NtM vs NtM + SINK-V Update Scaling (atan2)
+  ───────────────────────────────────────── */
+  const mVals = Array.from({ length: N }, (_, i) => i / (N - 1)); // m ranges from 0 to 1
+
+  const pureNtMData = mVals.map(m => ({
+    x: +m.toFixed(4),
+    y: +m.toFixed(4) // Linear update
+  }));
+
+  const sinkVData = mVals.map(m => {
+    // Math: (4 / pi) * atan2(m, sqrt(1 - m^2)) 
+    // Which mathematically evaluates to (4 / pi) * asin(m) mapping to [0, 2]
+    let v = Math.max(1e-7, 1 - m*m);
+    let y = (4 / Math.PI) * Math.atan2(m, Math.sqrt(v));
+    return {
+      x: +m.toFixed(4),
+      y: +y.toFixed(4)
+    };
+  });
+
+  new Chart(document.getElementById('chart-scaling'), {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Pure NtM (Linear)',
+          data: pureNtMData,
+          borderColor: '#6d7e94', backgroundColor: 'transparent',
+          borderWidth: 2, pointRadius: 0, tension: 0.1,
+          borderDash: [5, 5]
+        },
+        {
+          label: 'NtM + SINK-V (atan2 * 4/π)',
+          data: sinkVData,
+          borderColor: '#4ade80', backgroundColor: 'transparent',
+          borderWidth: 2.5, pointRadius: 0, tension: 0.1
+        }
+      ]
+    },
+    options: {
+      ...baseOpts('Momentum Magnitude |m|', 'Effective Update Magnitude', 0, 2.2),
+      scales: {
+        x: {
+          type: 'linear', min: 0, max: 1,
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Momentum Magnitude |m|', color: T.tickColor, font: T.tickFont }
+        },
+        y: {
+          type: 'linear', min: 0, max: 2.2,
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Effective Update Magnitude', color: T.tickColor, font: T.tickFont }
+        }
+      }
+    }
+  });
+
+})();
+</script>
+
+</body>
+</html>
