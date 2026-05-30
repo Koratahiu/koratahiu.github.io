@@ -1,4 +1,4 @@
 # My Website
 
-Posts about optization techniques:
+Posts about Optimization techniques:
 1. [AASS - Accelerated Arcsine SignSGD](https://koratahiu.github.io/aass/)
