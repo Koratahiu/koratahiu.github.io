@@ -427,41 +427,33 @@
   <p>A natural way to use the variance is Adam-style normalization: divide the momentum by the standard deviation $\sigma = \sqrt{V}$. However, as $m \to \pm 1$, the standard deviation approaches zero, which sends the naive division to ±∞. To keep the update bounded, we use the <code>atan2</code> operation in place of explicit division:</p>
 
   <div class="mathblock">
-    $$\text{update} = \operatorname{atan2}(m,\; \sigma) = \operatorname{atan2}\!\left(m,\; \sqrt{1 - m^2}\right)$$
+    $$\text{update} = \operatorname{atan2}(m,\; \sigma) = \operatorname{atan2}\!\left(m,\; \sqrt{1 - m^2}\right) = \arcsin(m)$$
   </div>
 
-  <p>Now comes the key observation. Consider a right triangle with a hypotenuse of $1$, an opposite side of length $m$, and an adjacent side of length $\sqrt{1 - m^2}$. By the definition of sine, the angle $\theta$ satisfies $\sin\theta = m$, which gives $\cos\theta = \sqrt{1-m^2}$. Therefore:</p>
-
-  <div class="mathblock">
-    $$\operatorname{atan2}(m,\; \sqrt{1 - m^2}) = \theta = \arcsin(m)$$
-  </div>
-
-  <div class="callout">
-    <strong>The variance-normalized update simplifies exactly to the arcsine function.</strong> This is not an approximation — it is an algebraic identity that falls out of the binary gradient structure.
-  </div>
-
-  <p>The complete AASS update rule is therefore:</p>
+  <p>To scale and bound our update to $[-2, 2]$ for stable training dynamics and predictable bounds, we multiply the resulting arcsine value by a normalization constant $\frac{4}{\pi}$:</p>
 
   <div class="mathblock highlight">
-    $$\boxed{\;\text{update} = \arcsin(m_t)\;}$$
+    $$\boxed{\;\text{update} = \frac{4}{\pi} \arcsin(m_t)\;}$$
     <div style="font-family:var(--mono);font-size:.72rem;color:var(--accent);margin-top:.8rem;">
-      where $m_t = \beta\,m_{t-1} + (1-\beta)\operatorname{sign}(g_t)$
+      where $m_t = \beta\,m_{t-1} + (1-\beta)\operatorname{sign}(g_t)$ and update $\in [-2, 2]$
     </div>
   </div>
+
+  <p>This $\frac{4}{\pi}$ scaling maps the maximum confidence limits exactly to $\pm 2$ instead of $\pm \frac{\pi}{2} \approx \pm 1.571$. This ensures that highly certain paths can run up to twice as fast as classical SignSGD.</p>
 
   <h3>3.3 — Properties of the Arcsine Update</h3>
 
   <ul class="prop-list">
-    <li><strong>Near zero</strong> ($m \approx 0$): $\arcsin(0) = 0$ — no update. Safe and conservative when direction is uncertain.</li>
-    <li><strong>High confidence</strong> ($m \approx \pm 1$): $\arcsin(\pm 1) = \pm\tfrac{\pi}{2} \approx \pm 1.571$ — update is ~57% larger than standard SignSGD's ±1.</li>
+    <li><strong>Near zero</strong> ($m \approx 0$): $\frac{4}{\pi}\arcsin(0) = 0$ — no update. Safe and conservative when direction is uncertain.</li>
+    <li><strong>High confidence</strong> ($m \approx \pm 1$): $\frac{4}{\pi}\arcsin(\pm 1) = \pm 2$ — update is exactly 100% larger than standard SignSGD's ±1, doubling acceleration.</li>
     <li><strong>Linear near zero, superlinear near extremes</strong>: exactly the shape you want from a confidence-adaptive optimizer.</li>
-    <li><strong>Bounded output</strong> $\in \bigl[-\tfrac{\pi}{2},\, \tfrac{\pi}{2}\bigr]$: no numerical explosion, even as variance approaches zero.</li>
+    <li><strong>Perfectly bounded output</strong> $\in [-2,\, 2]$: no numerical explosion, even as variance approaches zero.</li>
   </ul>
 
   <div class="chart-grid">
     <div class="chart-wrap">
-      <div class="chart-title">Fig. 2 — Arcsine vs. Linear Update</div>
-      <div class="chart-sub">Gold: arcsin(m). Blue dashed: identity m (standard SignSGD). The acceleration zone near ±1 is clearly visible.</div>
+      <div class="chart-title">Fig. 2 — Scaled Arcsine vs. Linear Update</div>
+      <div class="chart-sub">Gold: (4/π) * arcsin(m). Blue dashed: identity m (standard SignSGD). The acceleration zone peaks exactly at ±2.</div>
       <div class="chart-canvas"><canvas id="chart-arcsine"></canvas></div>
     </div>
     <div class="chart-wrap">
@@ -471,7 +463,7 @@
     </div>
   </div>
 
-  <p>Figures 2 and 3 tell complementary stories. Fig. 2 shows how $\arcsin(m)$ produces larger updates than the linear identity at high confidence values — the optimizer is <em>accelerated</em> exactly where the variance is lowest. Fig. 3 shows the underlying variance $V = 1 - m^2$: a parabola that encodes the information structure of the binary gradient. The arcsine function is the natural, variance-aware inverse of this structure.</p>
+  <p>Figures 2 and 3 tell complementary stories. Fig. 2 shows how the scaled $\frac{4}{\pi}\arcsin(m)$ produces larger updates than the linear identity at high confidence values — the optimizer is <em>accelerated</em> exactly where the variance is lowest. Fig. 3 shows the underlying variance $V = 1 - m^2$: a parabola that encodes the information structure of the binary gradient. The arcsine function is the natural, variance-aware inverse of this structure.</p>
 </section>
 
 <!-- ══════════════ §4 ALGORITHM ══════════════ -->
@@ -496,13 +488,13 @@
         <div><span class="step-n">1.</span>g_t = ∇L(θ_{t-1})                          <span class="c">← compute gradient</span></div>
         <div><span class="step-n">2.</span>s_t = <span class="hi-g">sign(g_t)</span>                          <span class="c">← NtM: normalize first</span></div>
         <div><span class="step-n">3.</span>m_t = β · m_{t-1} + (1 − β) · s_t         <span class="c">← momentum on binary signal</span></div>
-        <div><span class="step-n">4.</span>u_t = <span class="hi-b">arcsin(clamp(m_t, −1+ε, 1−ε))</span>   <span class="c">← variance acceleration</span></div>
+        <div><span class="step-n">4.</span>u_t = <span class="hi-b">(4 / π) * arcsin(clamp(m_t, −1+ε, 1−ε))</span>   <span class="c">← variance acceleration scaled to [-2, 2]</span></div>
         <div><span class="step-n">5.</span>θ_t = θ_{t-1} − η · u_t                    <span class="c">← parameter update</span></div>
       </div>
     </div>
   </div>
 
-  <p>The computational overhead relative to standard SignSGD with momentum is one arcsine call per parameter per step — negligible in practice. There is no second moment to track, no per-parameter learning rate scaling, and no additional memory beyond the momentum buffer already required by standard SignSGD.</p>
+  <p>The computational overhead relative to standard SignSGD with momentum is one scaled arcsine call per parameter per step — negligible in practice. There is no second moment to track, no per-parameter learning rate scaling, and no additional memory beyond the momentum buffer already required by standard SignSGD.</p>
 
   <table class="compare-tbl">
     <thead>
@@ -532,7 +524,7 @@
       </tr>
       <tr>
         <td>Confidence / variance acceleration</td>
-        <td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td>
+        <td class="no">✗</td><td class="no">✗</td><td class="yes">✓ (Scaled to [-2, 2])</td>
       </tr>
       <tr>
         <td>Extra memory per parameter</td>
@@ -681,7 +673,7 @@
 
   const arcsinData = mVals.map(mv => ({
     x: +mv.toFixed(4),
-    y: +Math.asin(Math.max(-1 + EPS, Math.min(1 - EPS, mv))).toFixed(5)
+    y: +((4.0 / Math.PI) * Math.asin(Math.max(-1 + EPS, Math.min(1 - EPS, mv)))).toFixed(5)
   }));
   const linearData = mVals.map(mv => ({ x: +mv.toFixed(4), y: +mv.toFixed(4) }));
 
@@ -690,7 +682,7 @@
     data: {
       datasets: [
         {
-          label: 'arcsin(m)  — AASS',
+          label: '(4/π) * arcsin(m)  — AASS',
           data: arcsinData,
           borderColor: '#e8b840', backgroundColor: 'transparent',
           borderWidth: 2.5, pointRadius: 0,
@@ -716,8 +708,8 @@
         },
         y: {
           type: 'linear',
-          min: -(Math.PI / 2) - 0.05,
-          max:  (Math.PI / 2) + 0.05,
+          min: -2.1,
+          max:  2.1,
           grid: { color: T.gridColor },
           ticks: {
             color: T.tickColor, font: T.tickFont,
