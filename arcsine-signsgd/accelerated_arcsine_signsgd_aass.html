@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accelerated Arcsine SignSGD (AASS)</title>
+
+    <!-- Tailwind CSS for elegant typography and layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    typography: {
+                        DEFAULT: {
+                            css: {
+                                maxWidth: '100%',
+                                h1: { color: '#0f172a' },
+                                h2: { color: '#1e293b', marginTop: '2em', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5em' },
+                                h3: { color: '#334155' },
+                                p: { color: '#334155', lineHeight: '1.8' },
+                                code: { color: '#2563eb', backgroundColor: '#eff6ff', padding: '0.2em 0.4em', borderRadius: '0.25rem', fontWeight: '600' },
+                                'code::before': { content: '""' },
+                                'code::after': { content: '""' },
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Chart.js for interactive visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- MathJax for rendering LaTeX equations -->
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+    </script>
+
+    <style>
+        /* Minimal custom styling to ensure charts look great */
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+            margin: 2.5rem 0;
+            padding: 1rem;
+            background: #ffffff;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid #e2e8f0;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 antialiased selection:bg-blue-200 selection:text-blue-900">
+
+    <main class="max-w-4xl mx-auto px-6 py-12 lg:px-8 lg:py-16">
+        
+        <!-- Header Section -->
+        <header class="mb-12 text-center">
+            <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 mb-4">
+                Accelerated Arcsine SignSGD (AASS)
+            </h1>
+            <div class="flex items-center justify-center space-x-4 text-slate-500 font-medium">
+                <span class="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm font-semibold tracking-wide uppercase">WIP</span>
+                <span>&bull;</span>
+                <span>By <span class="text-slate-800 font-bold">Korata Hiu</span> <span class="text-sm font-normal italic">(adv_optm dev)</span></span>
+            </div>
+        </header>
+
+        <!-- Article Content -->
+        <article class="prose prose-slate prose-lg lg:prose-xl mx-auto">
+            
+            <h2>Abstract</h2>
+            <p>
+                SignSGD is a powerful optimization algorithm that applies a hard $\pm 1$ clip to optimizer updates. However, it suffers from several practical limitations: its momentum remains susceptible to gradient outliers, the updates lack meaningful variance near zero, and it inherently lacks variance or confidence acceleration. In this post, we propose two effective techniques that resolve these issues: 
+            </p>
+            <ol>
+                <li><strong>Normalization-then-momentum</strong>: Transforms momentum into a variance tracker of sign-flip probabilities.</li>
+                <li><strong>Variance acceleration</strong>: Mathematically translates standard update bounds into a beautiful Arcsine function space.</li>
+            </ol>
+
+            <h2>Introduction</h2>
+            <p>
+                In the realm of deep learning optimization, memory and communication bottlenecks are ever-present. SignSGD was introduced to tackle these challenges by quantizing gradients to their signs, transmitting and applying only a single bit ($\pm 1$) per parameter. It is celebrated for its communication efficiency and its theoretical robustness against extreme gradient scaling.
+            </p>
+            <p>
+                However, when deployed in the real world, optimization usually requires momentum to achieve stable and fast convergence. The standard way of marrying momentum with SignSGD often breaks the very scale-invariance the algorithm was designed to protect. If the optimizer encounters a sudden, massive gradient outlier, the moving average of the gradients gets completely distorted. Furthermore, standard sign updates struggle to distinguish between low-confidence (noisy) directions and high-confidence (consistent) directions. 
+            </p>
+            <p>
+                In this post, we introduce <strong>Accelerated Arcsine SignSGD (AASS)</strong>, outlining two elegant mathematical adjustments that solve these systemic issues and naturally inject variance-based acceleration into the optimization step.
+            </p>
+
+            <h2>The Scale-Invariance Paradox in Momentum</h2>
+            <p>
+                SignSGD is known to be scale-invariant because it forces any input into a discrete $\pm 1$ output. Usually, it is paired with momentum for smoother, faster convergence.
+            </p>
+            <p>
+                However, <em>momentum itself is not scale-invariant</em>. It is directly affected by the magnitude of incoming gradients. If the optimizer encounters even one massive gradient outlier, the momentum becomes heavily inflated for many steps to come. Theoretically, an outlier takes roughly $1 / (1-\beta)$ steps to decay. This reintroduces the exact bias and scaling vulnerability that SignSGD was supposed to mitigate in the first place, making it difficult—if not impossible—to utilize long-term momentum effectively.
+            </p>
+
+            <!-- Chart 1: Outlier Effect -->
+            <div class="chart-container">
+                <canvas id="outlierChart"></canvas>
+            </div>
+            <p class="text-sm text-center text-slate-500 mt-2 mb-8 italic">
+                Fig 1: Standard momentum is derailed by a single massive gradient outlier, whereas normalization-then-momentum remains perfectly bounded.
+            </p>
+
+            <h2>Normalization-then-Momentum</h2>
+            <p>
+                The solution to the outlier problem is beautifully simple: <strong>we apply the sign operation <em>before</em> calculating the momentum, instead of after.</strong>
+            </p>
+            <p>
+                By doing this, the momentum becomes a strict tracker of the proportion and variance of the sign flips. Because the inputs to the moving average are now strictly bounded to $\{-1, 1\}$, the momentum itself is naturally bounded to $[-1, 1]$.
+            </p>
+            <ul>
+                <li>If the gradient direction is <strong>consistent</strong>, the momentum averages out towards $\pm 1$ (resulting in maximum, confident updates).</li>
+                <li>If the gradient is <strong>flipping or noisy</strong>, the momentum averages out to $0$ (resulting in a zeroed or heavily damped update).</li>
+            </ul>
+            <p>
+                This immediately fixes the scale-invariance failure of standard momentum in SignSGD. It guarantees that the optimizer takes maximum steps in confident directions and conservative steps in noisy, flat regions—yielding an Adaptive-like behavior without tracking second-order moments directly.
+            </p>
+
+            <h2>Variance Acceleration (The Arcsine Function)</h2>
+            <p>
+                With normalization-then-momentum in place, we know that the incoming gradient is strictly binary: $g_t \in \{-1, 1\}$. Because $g_t$ is always either $1$ or $-1$, its square is always exactly $1$:
+            </p>
+            $$g_t^2 = 1$$
+            
+            <p>
+                The momentum tensor (the exponential moving average, let's call it $m$) represents the expected value (mean) of these gradients:
+            </p>
+            $$m = \mathbb{E}[g_t]$$
+            
+            <p>
+                From this, we can mathematically derive the moving average of the squared difference from the mean. This is the definition of variance ($V$):
+            </p>
+            $$V = \mathbb{E} \left[ (g_t - m)^2 \right]$$
+            
+            <p>
+                Let's expand the polynomial inside the expectation:
+            </p>
+            $$V = \mathbb{E} \left[ g_t^2 - 2g_t m + m^2 \right]$$
+            
+            <p>
+                Because the expectation operator is linear, we can apply it to each term individually. Remember that $m$ is already an expectation, so it acts as a constant in this context:
+            </p>
+            $$V = \mathbb{E}[g_t^2] - 2m\mathbb{E}[g_t] + m^2$$
+            
+            <p>
+                Now, we simply substitute our two known facts ($g_t^2 = 1$ and $\mathbb{E}[g_t] = m$):
+            </p>
+            $$V = 1 - 2m(m) + m^2$$
+            $$V = 1 - 2m^2 + m^2$$
+            $$V = 1 - m^2$$
+            
+            <p>
+                Therefore, the centered variance denominator ($\sqrt{V}$) used in adaptive optimizers simplifies <em>exactly</em> to:
+            </p>
+            $$\text{denom} = \sqrt{1 - m^2}$$
+            
+            <p>
+                In standard adaptive optimizers (like Adam), we divide the momentum by this denominator. However, division can lead to instabilities (reaching infinity or NaN). To make the update safely bounded, we replace the division operation with the angular <code>atan2</code> function:
+            </p>
+            $$\text{Update} = \text{atan2}(m, \sqrt{V})$$
+            
+            <p>
+                Substituting our derived variance ($V = 1 - m^2$), the formula becomes:
+            </p>
+            $$\text{Update} = \text{atan2}\left(m, \sqrt{1 - m^2}\right)$$
+            
+            <p>
+                Here is where the magic happens. In trigonometry, if you have a right triangle with a hypotenuse of $1$ and an opposite side of $m$, the adjacent side is exactly $\sqrt{1 - m^2}$. Therefore, the expression $\text{atan2}(m, \sqrt{1 - m^2})$ simplifies <strong>exactly</strong> to the Arcsine function:
+            </p>
+            $$\text{Update} = \arcsin(m)$$
+            
+            <p>
+                By applying these steps, <strong>we have mathematically transformed the momentum into an Arcsine space!</strong>
+            </p>
+
+            <h3>Why is this powerful?</h3>
+            <p>
+                The Arcsine function naturally provides exactly the behavior we want from a confidence-accelerated optimizer:
+            </p>
+            <ul>
+                <li>When momentum is near $0$ (high noise, low confidence), $\arcsin(0) \approx 0$. The update behaves linearly and safely.</li>
+                <li>When momentum approaches $1$ or $-1$ (high consistency, high confidence), the function curves upwards, accelerating the update step to $\arcsin(1) \approx 1.57$.</li>
+            </ul>
+
+            <!-- Chart 2: Arcsine vs Linear -->
+            <div class="chart-container">
+                <canvas id="arcsineChart"></canvas>
+            </div>
+            <p class="text-sm text-center text-slate-500 mt-2 mb-8 italic">
+                Fig 2: The Arcsine update naturally accelerates high-confidence momentum ($m \to 1$) compared to a standard linear step, while remaining safe and linear near zero.
+            </p>
+            
+            <hr class="mt-16 mb-8 border-slate-200">
+            <p class="text-sm text-slate-500 italic">
+                *** Hand written, and in the end grammar corrected by AI (with self review).
+            </p>
+            
+        </article>
+    </main>
+
+    <!-- Chart generation scripts -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Shared Chart options for aesthetics
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            font: { family: "'Inter', sans-serif", size: 14 }
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { family: "'Inter', sans-serif" } } },
+                    y: { grid: { color: '#f1f5f9' }, ticks: { font: { family: "'Inter', sans-serif" } } }
+                }
+            };
+
+            // ==========================================
+            // CHART 1: Outlier Effect on Momentum
+            // ==========================================
+            const ctx1 = document.getElementById('outlierChart').getContext('2d');
+            
+            // Generate dummy data demonstrating an outlier
+            const steps = Array.from({length: 50}, (_, i) => i + 1);
+            const standardMomentum = [];
+            const normMomentum = [];
+            
+            let m_std = 0;
+            let m_norm = 0;
+            const beta = 0.9;
+            
+            for(let i=0; i<50; i++) {
+                // Normal gradient is ~0.5. At step 10, massive outlier.
+                let grad = (i === 10) ? 50 : 0.5; 
+                
+                // Standard Momentum (Scale-dependent)
+                m_std = beta * m_std + (1 - beta) * grad;
+                standardMomentum.push(m_std);
+                
+                // Normalization-then-Momentum (Scale-invariant)
+                let signGrad = grad > 0 ? 1 : (grad < 0 ? -1 : 0);
+                m_norm = beta * m_norm + (1 - beta) * signGrad;
+                normMomentum.push(m_norm);
+            }
+
+            new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: steps,
+                    datasets: [
+                        {
+                            label: 'Standard Momentum (Explodes on Outlier)',
+                            data: standardMomentum,
+                            borderColor: '#ef4444', // Red
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 3,
+                            tension: 0.3,
+                            fill: true
+                        },
+                        {
+                            label: 'Norm-then-Momentum (Bounded & Safe)',
+                            data: normMomentum,
+                            borderColor: '#10b981', // Green
+                            borderWidth: 3,
+                            tension: 0.3,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    ...commonOptions,
+                    plugins: {
+                        ...commonOptions.plugins,
+                        title: { display: true, text: 'Momentum Trajectory with Outlier at Step 10', font: {size: 16} }
+                    },
+                    scales: {
+                        ...commonOptions.scales,
+                        y: { ...commonOptions.scales.y, title: { display: true, text: 'Momentum Value' } },
+                        x: { ...commonOptions.scales.x, title: { display: true, text: 'Training Steps' } }
+                    }
+                }
+            });
+
+            // ==========================================
+            // CHART 2: Arcsine vs Linear
+            // ==========================================
+            const ctx2 = document.getElementById('arcsineChart').getContext('2d');
+            
+            // Generate X values from -1 to 1
+            const mValues = [];
+            const linearUpdate = [];
+            const arcsineUpdate = [];
+            
+            for(let m = -1; m <= 1.01; m += 0.05) {
+                // fix floating point errors
+                let val = Math.round(m * 100) / 100;
+                if (val > 1) val = 1;
+                if (val < -1) val = -1;
+                
+                mValues.push(val.toFixed(2));
+                linearUpdate.push(val);
+                arcsineUpdate.push(Math.asin(val));
+            }
+
+            new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: mValues,
+                    datasets: [
+                        {
+                            label: 'Arcsine Update: arcsin(m)',
+                            data: arcsineUpdate,
+                            borderColor: '#3b82f6', // Blue
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 3,
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Linear Update: m',
+                            data: linearUpdate,
+                            borderColor: '#94a3b8', // Gray
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            tension: 0
+                        }
+                    ]
+                },
+                options: {
+                    ...commonOptions,
+                    plugins: {
+                        ...commonOptions.plugins,
+                        title: { display: true, text: 'Confidence Acceleration via Arcsine Space', font: {size: 16} },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => `Momentum (m): ${items[0].label}`,
+                                label: (item) => `${item.dataset.label.split(':')[0]}: ${item.raw.toFixed(3)}`
+                            }
+                        }
+                    },
+                    scales: {
+                        ...commonOptions.scales,
+                        y: { 
+                            ...commonOptions.scales.y, 
+                            title: { display: true, text: 'Update Magnitude' },
+                            min: -1.6, max: 1.6
+                        },
+                        x: { 
+                            ...commonOptions.scales.x, 
+                            title: { display: true, text: 'Momentum (m)' },
+                            ticks: { maxTicksLimit: 11 }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
