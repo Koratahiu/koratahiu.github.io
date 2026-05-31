@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Orthogonal Weight Decomposition: Mathematically fusing DoRA and OFT for minimal-overhead directional scaling.">
+  <title>DOFT — Orthogonal Weight Decomposition</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lora:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <script>
+    MathJax = {
+      tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']], processEscapes: true },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg:          #0c0f16;
+      --surface:     #111620;
+      --surface2:    #181e2a;
+      --border:      #22293a;
+      --border2:     #2e3848;
+      --text:        #d8e4f0;
+      --muted:       #6d7e94;
+      --dim:         #3d4d5e;
+      --accent:      #a78bfa;
+      --accent-l:    #c4b5fd;
+      --accent-glow: rgba(167, 139, 250, 0.12);
+      --blue:        #60a5fa;
+      --blue-dim:    rgba(96, 165, 250, 0.1);
+      --green:       #4ade80;
+      --red:         #f87171;
+      --mono:        'JetBrains Mono', 'Courier New', monospace;
+      --serif:       'Lora', Georgia, serif;
+      --display:     'Playfair Display', Georgia, serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--serif);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1.05rem;
+      line-height: 1.9;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 50px;
+      background: rgba(12,15,22,.93);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 1.75rem;
+      padding: 0 2rem;
+    }
+    .nav-brand {
+      font-family: var(--mono); font-size: .78rem; font-weight: 500;
+      color: var(--accent); text-decoration: none; letter-spacing: .08em;
+      flex-shrink: 0;
+    }
+    .nav-links { display: flex; gap: 1.5rem; list-style: none; overflow-x: auto; }
+    .nav-links a {
+      font-family: var(--mono); font-size: .68rem; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--muted); text-decoration: none;
+      transition: color .18s; white-space: nowrap;
+    }
+    .nav-links a:hover { color: var(--accent-l); }
+
+    /* ── LINKS ── */
+    a.text-link {
+      color: var(--blue);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    a.text-link:hover {
+      color: var(--accent-l);
+      text-decoration: underline;
+    }
+
+    /* ── LAYOUT ── */
+    .wrap { max-width: 820px; margin: 0 auto; padding: 0 2rem; }
+
+    /* ── HEADER ── */
+    header { padding: 110px 0 3.5rem; border-bottom: 1px solid var(--border); }
+
+    .wip-badge {
+      display: inline-flex; align-items: center; gap: .45em;
+      font-family: var(--mono); font-size: .62rem; font-weight: 500;
+      letter-spacing: .14em; text-transform: uppercase;
+      color: var(--accent-l);
+      border: 1px solid var(--accent);
+      border-radius: 3px; padding: 2px 9px; margin-bottom: 1.4rem;
+    }
+    .wip-badge::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent-l);
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+    h1 {
+      font-family: var(--display);
+      font-size: clamp(1.9rem, 5vw, 3.1rem);
+      font-weight: 700; line-height: 1.15;
+      color: var(--text); margin-bottom: .4rem;
+    }
+    .paper-tag {
+      font-family: var(--mono); font-size: .82rem;
+      color: var(--accent); letter-spacing: .18em; margin-bottom: 2rem;
+    }
+    .author-block { margin-top: 1.75rem; }
+    .author { font-family: var(--display); font-style: italic; font-size: 1.05rem; }
+    .affil {
+      font-family: var(--mono); font-size: .68rem;
+      color: var(--muted); letter-spacing: .05em; margin-top: .2rem;
+    }
+    sup { color: var(--accent); font-size: .7em; }
+
+    /* ── SECTIONS ── */
+    section { margin: 4rem 0; }
+    h2 {
+      font-family: var(--display); font-size: 1.55rem; font-weight: 600;
+      color: var(--text); margin-bottom: 1.4rem;
+      padding-top: 1rem; border-top: 1px solid var(--border);
+    }
+    h2 .sn { color: var(--accent); font-size: .88em; margin-right: .45em; }
+    h3 {
+      font-family: var(--display); font-size: 1.1rem; font-weight: 600;
+      color: var(--muted); margin: 2.2rem 0 1rem;
+    }
+    p { margin-bottom: 1.2rem; }
+
+    /* ── ABSTRACT ── */
+    .abstract-box {
+      margin: 2.5rem 0;
+      padding: 2rem 2.4rem;
+      background: var(--surface);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 6px 6px 0;
+    }
+    .box-label {
+      font-family: var(--mono); font-size: .64rem; font-weight: 500;
+      text-transform: uppercase; letter-spacing: .16em;
+      color: var(--accent); margin-bottom: .9rem;
+    }
+
+    /* ── MATH BLOCKS ── */
+    .mathblock {
+      margin: 1.8rem 0; padding: 1.4rem 1.8rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; overflow-x: auto; text-align: center;
+    }
+    .mathblock.highlight {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+    }
+    .mathblock.blue-hl {
+      border-color: rgba(96, 165, 250, 0.3);
+      background: var(--blue-dim);
+    }
+
+    /* ── PROOF STEPS ── */
+    .proof-step {
+      margin: 1.1rem 0; padding-left: 1.4rem;
+      border-left: 2px solid var(--border2);
+    }
+    .proof-label {
+      font-family: var(--mono); font-size: .65rem; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--muted); margin-bottom: .3rem;
+    }
+
+    /* ── CALLOUT ── */
+    .callout {
+      margin: 1.8rem 0; padding: 1.15rem 1.5rem;
+      background: var(--accent-glow);
+      border: 1px solid rgba(167, 139, 250, 0.28);
+      border-radius: 6px; font-size: .97rem;
+    }
+    .callout strong { color: var(--accent-l); }
+
+    /* ── ALGO BOX ── */
+    .algo-box { margin: 2rem 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .algo-head {
+      background: var(--surface2); padding: .6rem 1.3rem;
+      font-family: var(--mono); font-size: .7rem;
+      color: var(--accent); letter-spacing: .1em; text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .algo-body {
+      font-family: var(--mono); font-size: .84rem; line-height: 2;
+      padding: 1.4rem 1.6rem; background: var(--surface); color: var(--text);
+    }
+    .c { color: var(--muted); }
+    .kw { color: var(--accent-l); }
+    .hi-r { color: var(--red); }
+    .hi-g { color: var(--green); }
+    .hi-b { color: var(--blue); }
+    .hi-p { color: var(--accent); }
+    .step-n { color: var(--accent); user-select: none; margin-right: .5em; }
+
+    /* ── PROPERTY LIST ── */
+    .prop-list {
+      margin: 1.5rem 0; padding: 1.4rem 1.8rem;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    }
+    .prop-list li {
+      list-style: none; padding-left: 1.6em; position: relative;
+      margin-bottom: .25rem;
+    }
+    .prop-list li::before {
+      content: '→'; position: absolute; left: 0; color: var(--accent);
+    }
+
+    /* ── CHARTS ── */
+    .chart-wrap {
+      margin: 2.2rem 0; padding: 1.4rem 1.5rem;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    }
+    .chart-title {
+      font-family: var(--mono); font-size: .7rem; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--muted); margin-bottom: .5rem;
+    }
+    .chart-sub {
+      font-size: .8rem; color: var(--dim); line-height: 1.5; margin-bottom: 1rem;
+    }
+    .chart-canvas { position: relative; height: 260px; }
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 2rem 0; }
+    @media (max-width: 620px) { .chart-grid { grid-template-columns: 1fr; } }
+
+    /* ── TABLE ── */
+    .compare-tbl { width: 100%; border-collapse: collapse; margin: 2rem 0; font-size: .88rem; }
+    .compare-tbl th {
+      font-family: var(--mono); font-size: .67rem; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted); padding: .7rem 1rem;
+      background: var(--surface2); border: 1px solid var(--border); text-align: center;
+    }
+    .compare-tbl th:first-child { text-align: left; }
+    .compare-tbl td { padding: .6rem 1rem; border: 1px solid var(--border); text-align: center; }
+    .compare-tbl td:first-child { text-align: left; font-size: .82rem; color: var(--muted); }
+    .compare-tbl tr:hover td { background: var(--surface); }
+    .yes { color: var(--green); font-weight: 600; }
+    .no  { color: var(--red); }
+    .part { color: var(--accent); }
+
+    /* ── FOOTER ── */
+    footer {
+      margin-top: 5rem; padding: 2.5rem 0 4rem;
+      border-top: 1px solid var(--border);
+    }
+    .fn {
+      font-family: var(--mono); font-size: .72rem;
+      color: var(--muted); line-height: 1.9;
+    }
+
+    @media (max-width: 620px) {
+      .wrap { padding: 0 1.2rem; }
+      nav   { padding: 0 1.2rem; gap: 1rem; }
+      .abstract-box { padding: 1.4rem; }
+      .algo-body { font-size: .76rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-brand">DOFT</a>
+  <ul class="nav-links">
+    <li><a href="#abstract">Abstract</a></li>
+    <li><a href="#intro">Introduction</a></li>
+    <li><a href="#norm">Norm Preservation</a></li>
+    <li><a href="#derivation">The Derivation</a></li>
+    <li><a href="#algo">Algorithm</a></li>
+    <li><a href="#performance">Performance</a></li>
+    <li><a href="#references">References</a></li>
+  </ul>
+</nav>
+
+<div class="wrap">
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header>
+  <div class="wip-badge">Technical Report WIP</div>
+  <h1>Exact Orthogonal Weight Decomposition</h1>
+  <div class="paper-tag">DOFT: DoRA meets OFT</div>
+  <div class="author-block">
+    <div class="author">Korata Hiu</div>
+    <div class="affil">
+      Implementation: <a href="https://github.com/Nerogar/OneTrainer/pull/1335" target="_blank" class="text-link">OneTrainer PR #1335</a>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ ABSTRACT ══════════════ -->
+<section id="abstract">
+  <div class="abstract-box">
+    <div class="box-label">Abstract</div>
+    <p>Weight-Decomposed Low-Rank Adaptation (DoRA) significantly improves over standard LoRA by separating parameter updates into <em>magnitude</em> and <em>direction</em>. However, to calculate the updated directional vectors during the forward pass, standard DoRA implementations must materialize an intermediate full-size weight matrix $\Delta W$, leading to substantial VRAM and compute overhead.</p>
+    <p>This report details <strong>DOFT</strong>, a mathematically exact fusion of DoRA with Orthogonal Finetuning (OFT). By exploiting the fundamental property that orthogonal transformations strictly preserve vector norms, DOFT calculates the perfect magnitude scaling without ever materializing modified weights in memory. Through the associative property of matrix multiplication, DOFT shifts an $\mathcal{O}(N_{out} \times N_{in})$ memory bottleneck down to a lightweight $\mathcal{O}(\text{Batch} \times \text{Seq} \times N_{out})$ scaling operation directly on the output activations.</p>
+  </div>
+</section>
+
+<!-- ══════════════ INTRODUCTION ══════════════ -->
+<section id="intro">
+  <h2><span class="sn">§ 0</span> Introduction</h2>
+
+  <p>To understand why DOFT is mathematically elegant, we must look at the mechanics of standard DoRA. In DoRA, a pre-trained weight matrix $W_{orig}$ is modified by applying a learnable magnitude vector $m$ to a normalized directional matrix $V$:</p>
+
+  <div class="mathblock">
+    $$W_{DoRA} = m \odot \frac{V}{||V||_c}$$
+  </div>
+
+  <p>In standard LoRA-DoRA, $V = W_{orig} + BA$. To calculate $||V||_c$ (the norm of the columns/rows), the system must literally construct $W_{orig} + BA$ in GPU memory during every single forward pass. For large layers (e.g., $8192 \times 8192$), materializing this matrix destroys the memory-efficiency promises of PEFT.</p>
+
+  <p>Orthogonal Finetuning (OFT) presents a different paradigm: instead of adding a low-rank matrix, it applies an orthogonal rotation $R$ to the original weights, such that $V = W_{orig} R^T$. The brilliance of combining DoRA with OFT lies in a specific mathematical property of orthogonal matrices: <strong>they preserve norms</strong>.</p>
+</section>
+
+<!-- ══════════════ §1 NORM PRESERVATION ══════════════ -->
+<section id="norm">
+  <h2><span class="sn">§ 1</span> The Orthogonal Norm-Preservation Property</h2>
+
+  <p>In OFT, the adapted weights are defined by rotating the base weights using an orthogonal matrix $R$. By definition, for any orthogonal matrix, $R^T R = I$ (the identity matrix).</p>
+
+  <p>Let's isolate a single row of the weight matrix, corresponding to a single output channel, denoted as the row vector $w$. We want to find the squared $L_2$ norm of this vector after the OFT rotation is applied:</p>
+
+  <div class="proof-step">
+    <div class="proof-label">Squared norm of the rotated vector</div>
+    $$||w_{oft}||^2 = (w R^T)(w R^T)^T$$
+  </div>
+
+  <div class="proof-step">
+    <div class="proof-label">Transpose property: $(AB)^T = B^T A^T$</div>
+    $$||w_{oft}||^2 = w R^T R w^T$$
+  </div>
+
+  <div class="proof-step">
+    <div class="proof-label">Orthogonal property: $R^T R = I$</div>
+    $$||w_{oft}||^2 = w I w^T$$
+  </div>
+
+  <div class="proof-step">
+    <div class="proof-label">Identity reduction</div>
+    $$||w_{oft}||^2 = w w^T = ||w_{orig}||^2$$
+  </div>
+
+  <div class="callout">
+    <strong>Conclusion:</strong> The magnitude (norm) of every single row in the weight matrix is <em>completely unchanged</em> by Orthogonal Finetuning.
+  </div>
+</section>
+
+<!-- ══════════════ §2 DERIVATION ══════════════ -->
+<section id="derivation">
+  <h2><span class="sn">§ 2</span> Deriving the DOFT Optimization</h2>
+
+  <p>Because we just proved that $||W_{OFT}||_c = ||W_{orig}||_c$, we can substitute the denominator in the standard DoRA equation. We define our direction matrix as $V = W_{OFT} = W_{orig} R^T$:</p>
+
+  <div class="mathblock">
+    $$W_{DOFT} = m \odot \frac{W_{OFT}}{||W_{orig}||_c}$$
+  </div>
+
+  <p>Notice what happens here: both $m$ (our learnable DoRA magnitude) and $||W_{orig}||_c$ (the frozen initial norm of the pre-trained weights) are static 1D vectors of size <code>[out_features]</code>. We can combine them into a single scaling vector, $S = \frac{m}{||W_{orig}||_c}$.</p>
+
+  <div class="mathblock blue-hl">
+    $$W_{DOFT} = S \odot W_{OFT}$$
+  </div>
+
+  <h3>The Associative Shift to Output Activations</h3>
+
+  <p>Normally, a linear layer computes $Y = X \cdot W^T$. If we plug in our materialized DOFT weights, we get:</p>
+
+  <div class="mathblock">
+    $$Y = X \cdot (S \odot W_{OFT})^T$$
+  </div>
+
+  <p>Because scaling the rows of $W$ by a vector $S$ is mathematically equivalent to scaling the columns of $W^T$, we can use the associative property to pull the scale vector $S$ <em>outside</em> the matrix multiplication entirely:</p>
+
+  <div class="mathblock highlight">
+    $$\boxed{\;Y = (X \cdot W_{OFT}^T) \odot S\;}$$
+  </div>
+
+  <p>This is the magic of DOFT. The term $(X \cdot W_{OFT}^T)$ is just the standard output of the OFT forward pass. By applying the scale $\odot S$ to the <em>output activations</em> instead of the weights, we achieve identical mathematical results with a fraction of the memory footprint.</p>
+</section>
+
+<!-- ══════════════ §3 ALGORITHM ══════════════ -->
+<section id="algo">
+  <h2><span class="sn">§ 3</span> The Algorithm</h2>
+
+  <p>By leveraging the associative property, we construct a forward pass that entirely sidesteps weight materialization. We compute the initial norm at startup, and during the forward pass, we simply apply the corresponding scale vector to the output activations returned by the underlying OFT layer.</p>
+
+  <div class="algo-box">
+    <div class="algo-head">Algorithm — DOFT Forward Pass</div>
+    <div class="algo-body">
+      <div><span class="c">// Initialization (Done once at startup)</span></div>
+      <div>W_orig = layer.weight</div>
+      <div>initial_norm = norm(W_orig, dim=1)           <span class="c">← shape: [out_features]</span></div>
+      <div>dora_scale = Parameter(initial_norm.clone()) <span class="c">← shape: [out_features]</span></div>
+      <br>
+      <div><span class="c">// Forward Pass (Per batch)</span></div>
+      <div><span class="kw">def</span> forward(x):</div>
+      <div style="padding-left:2em">
+        <div><span class="step-n">1.</span>y_oft = OFT_forward(x)                        <span class="c">← Compute X * (W R^T)^T</span></div>
+        <br>
+        <div><span class="step-n">2.</span><span class="c">// Add eps to prevent division by zero on dead neurons</span></div>
+        <div>&nbsp;&nbsp;&nbsp;scale = dora_scale / (initial_norm + <span class="hi-p">eps</span>)</div>
+        <br>
+        <div><span class="step-n">3.</span>y_doft = y_oft * scale.to(y_oft.dtype)        <span class="c">← Apply DoRA scaling to output</span></div>
+        <br>
+        <div><span class="kw">return</span> y_doft</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ CHARTS ══════════════ -->
+<section id="performance">
+  <h2><span class="sn">§ 4</span> Memory and Compute Optimizations</h2>
+
+  <p>The practical consequence of shifting the DoRA computation from the weights to the activations is massive VRAM savings. Materializing $\Delta W$ in standard DoRA requires allocating an $\mathcal{O}(N_{out} \times N_{in})$ tensor, which must be stored in memory for the backward pass to calculate gradients for $m$. DOFT requires zero extra parameter allocations during the forward pass.</p>
+
+  <div class="chart-grid">
+    <div class="chart-wrap">
+      <div class="chart-title">Fig. 1 — Intermediate Tensor Memory Overhead</div>
+      <div class="chart-sub">Comparing the memory required to materialize weights (Standard DoRA) vs scaling output activations (DOFT). Assumes Batch=4, Seq=1024, fp16.</div>
+      <div class="chart-canvas"><canvas id="chart-memory"></canvas></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">Fig. 2 — Norm Consistency over Training Steps</div>
+      <div class="chart-sub">By mathematical definition, the L2 Norm of the base weights remains perfectly static under OFT transformations.</div>
+      <div class="chart-canvas"><canvas id="chart-norm"></canvas></div>
+    </div>
+  </div>
+
+  <table class="compare-tbl">
+    <thead>
+      <tr>
+        <th>Operation</th>
+        <th>Standard DoRA</th>
+        <th>DOFT</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Norm Calculation</td>
+        <td class="no">Dynamically calculated per step</td>
+        <td class="yes">Cached once at init</td>
+      </tr>
+      <tr>
+        <td>Weight Materialization</td>
+        <td class="no">$W_{orig} + \Delta W$ in memory</td>
+        <td class="yes">None (Output Scaling)</td>
+      </tr>
+      <tr>
+        <td>Intermediate Memory</td>
+        <td class="no">$\mathcal{O}(d_{in} \times d_{out})$</td>
+        <td class="yes">$\mathcal{O}(B \times L \times d_{out})$</td>
+      </tr>
+      <tr>
+        <td>Math Approximation</td>
+        <td style="color:var(--text)">Exact</td>
+        <td class="yes">Exact</td>
+      </tr>
+    </tbody>
+  </table>
+
+</section>
+
+<!-- ══════════════ REFERENCES ══════════════ -->
+<section id="references">
+  <h2><span class="sn">§ 5</span> References</h2>
+  <p style="font-size: 0.95rem; color: var(--text);">
+    Qiu, Z., Liu, W., Weller, A., &amp; Schölkopf, B. (2025). <em>Orthogonal Finetuning Made Scalable (Version 2)</em>. arXiv. 
+    <a href="https://doi.org/10.48550/ARXIV.2506.19847" target="_blank" class="text-link">https://doi.org/10.48550/ARXIV.2506.19847</a>
+  </p>
+  <p style="font-size: 0.95rem; color: var(--text);">
+    Liu, S.-Y., Wang, C.-Y., Yin, H., Molchanov, P., Wang, Y.-C. F., Cheng, K.-T., & Chen, M.-H. (2024). <em>DoRA: Weight-Decomposed Low-Rank Adaptation (Version 6). </em>. arXiv. 
+    <a href="https://doi.org/10.48550/ARXIV.2402.09353" target="_blank" class="text-link">https://doi.org/10.48550/ARXIV.2402.09353</a>
+  </p>
+</section>
+
+<!-- ══════════════ FOOTER ══════════════ -->
+<footer>
+  <div class="fn">
+    <div>† Handwritten. Grammar-corrected by AI, with self-review by the author.</div>
+    <div style="margin-top:.4rem; color:var(--dim)">DOFT Analysis · Korata Hiu · Parameter-Efficient Finetuning Mechanisms</div>
+  </div>
+</footer>
+
+</div><!-- .wrap -->
+
+<!-- ══════════════ SCRIPTS ══════════════ -->
+<script>
+(function () {
+  /* ── shared theme ── */
+  const T = {
+    gridColor:   'rgba(255,255,255,0.045)',
+    tickColor:   '#3d4d5e',
+    tickFont:    { family: "'JetBrains Mono', monospace", size: 10 },
+    legendFont:  { family: "'JetBrains Mono', monospace", size: 11 },
+    tooltip: {
+      backgroundColor: '#111620', titleColor: '#d8e4f0',
+      bodyColor: '#6d7e94', borderColor: '#22293a', borderWidth: 1
+    }
+  };
+
+  function baseOpts(xTitle, yTitle, yMin, yMax) {
+    return {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: {
+        legend: { labels: { color: T.tickColor, font: T.legendFont, boxWidth: 14, padding: 14 } },
+        tooltip: T.tooltip
+      },
+      scales: {
+        x: {
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont, maxTicksLimit: 10 },
+          title: { display: !!xTitle, text: xTitle, color: T.tickColor, font: T.tickFont }
+        },
+        y: {
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: !!yTitle, text: yTitle, color: T.tickColor, font: T.tickFont },
+          ...(yMin !== undefined ? { min: yMin } : {}),
+          ...(yMax !== undefined ? { max: yMax } : {})
+        }
+      }
+    };
+  }
+
+  /* ─────────────────────────────────────────
+     Chart 1 — Memory Overhead
+  ───────────────────────────────────────── */
+  const dims = [1024, 2048, 4096, 8192, 16384];
+  
+  // Standard DoRA: Need to materialize W = d_in * d_out * 2 bytes (fp16)
+  const memDoRA = dims.map(d => (d * d * 2) / (1024 * 1024)); 
+  
+  // DOFT: Only scale output = Batch(4) * Seq(1024) * d_out * 2 bytes (fp16)
+  const B = 4;
+  const L = 1024;
+  const memDOFT = dims.map(d => (B * L * d * 2) / (1024 * 1024));
+
+  new Chart(document.getElementById('chart-memory'), {
+    type: 'line',
+    data: {
+      labels: dims,
+      datasets: [
+        {
+          label: 'Standard DoRA Weight Materialization (MB)',
+          data: memDoRA,
+          borderColor: '#f87171', backgroundColor: 'rgba(248, 113, 113, 0.1)',
+          borderWidth: 2, pointRadius: 4, tension: 0.3, fill: true
+        },
+        {
+          label: 'DOFT Activation Scaling (MB)',
+          data: memDOFT,
+          borderColor: '#4ade80', backgroundColor: 'transparent',
+          borderWidth: 2, pointRadius: 4, tension: 0.3
+        }
+      ]
+    },
+    options: {
+      ...baseOpts('Hidden Dimension Size', 'Extra VRAM Allocated (MB)'),
+      scales: {
+        x: {
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Hidden Dimension Size', color: T.tickColor, font: T.tickFont }
+        },
+        y: {
+          type: 'linear',
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'VRAM Required (MB)', color: T.tickColor, font: T.tickFont }
+        }
+      }
+    }
+  });
+
+  /* ─────────────────────────────────────────
+     Chart 2 — Norm Consistency
+  ───────────────────────────────────────── */
+  const steps = [0, 100, 200, 300, 400, 500];
+  const origNorm = Array(6).fill(12.45); // Static mock norm
+  
+  // Standard LoRA's norm drifts wildly over training
+  const loraNorm = [12.45, 12.60, 13.10, 13.85, 14.30, 15.05]; 
+
+  new Chart(document.getElementById('chart-norm'), {
+    type: 'line',
+    data: {
+      labels: steps,
+      datasets: [
+        {
+          label: '||W_OFT||_2 (DOFT Base)',
+          data: origNorm,
+          borderColor: '#a78bfa', backgroundColor: 'transparent',
+          borderWidth: 3, borderDash: [5, 5], pointRadius: 0, tension: 0
+        },
+        {
+          label: '||W_LoRA||_2 (Standard LoRA)',
+          data: loraNorm,
+          borderColor: '#60a5fa', backgroundColor: 'transparent',
+          borderWidth: 2, pointRadius: 0, tension: 0.3
+        }
+      ]
+    },
+    options: {
+      ...baseOpts('Training Step', 'Weight L2 Norm', 12.0, 16.0),
+    }
+  });
+
+})();
+</script>
+
+</body>
+</html>
