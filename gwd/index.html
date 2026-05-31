@@ -308,7 +308,7 @@
 
   <p>Weight decay is conventionally implemented as an $L_2$ penalty: $\lambda \| \theta \|_2^2$, which yields a gradient of $2\lambda \theta$. In the context of standard SGD, this pulls all weights toward zero at a rate proportional to their magnitude. The parameter space is treated as perfectly isotropic (spherical).</p>
 
-  <p>But adaptive optimizers warp this space. Adam stretches coordinates inversely proportional to gradient variance. SignSGD maps the entire continuous space onto a discrete hypercube. Sinkhorn optimizers impose matrix-level structural constraints. When you apply a standard $L_2$ decay step inside these optimizers, you are applying a <em>spherical</em> prior to a <em>warped</em> space. The regularizer actively fights the preconditioner.</p>
+  <p>But adaptive optimizers warp this space. Adam stretches coordinates inversely proportional to gradient variance. SignSGD maps the entire continuous space onto a discrete hypercube. Sinkhorn optimizers impose matrix-level structural constraints. When we apply a standard $L_2$ decay step inside these optimizers, we are applying a <em>spherical</em> prior to a <em>warped</em> space. The regularizer actively fights the preconditioner.</p>
 
   <div class="callout">
     <strong>The Core Principle:</strong> If an optimizer scales the gradient $g$ by a preconditioning matrix $P^{-1}$, it must also scale the weight decay penalty by the same $P^{-1}$. The prior must live in the same geometry as the likelihood.
