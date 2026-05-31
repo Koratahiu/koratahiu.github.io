@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Geometric Weight Decay (GWD): Aligning parameter regularization with optimizer geometry for Adam, SignSGD, and SinkSGD.">
+  <title>GWD — Geometric Weight Decay</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lora:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <script>
+    MathJax = {
+      tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']], processEscapes: true },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg:          #0c0f16;
+      --surface:     #111620;
+      --surface2:    #181e2a;
+      --border:      #22293a;
+      --border2:     #3a4659;
+      --text:        #d8e4f0;
+      --muted:       #6d7e94;
+      --dim:         #3d4d5e;
+      --accent:      #20a8c8;
+      --accent-l:    #40cce8;
+      --accent-glow: rgba(32,168,200,.14);
+      --gold:        #c89020;
+      --gold-dim:    rgba(200,144,32,.1);
+      --green:       #4ade80;
+      --red:         #f87171;
+      --blue:        #5b9cf6;
+      --mono:        'JetBrains Mono', 'Courier New', monospace;
+      --serif:       'Lora', Georgia, serif;
+      --display:     'Playfair Display', Georgia, serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--serif);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1.05rem;
+      line-height: 1.9;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 50px;
+      background: rgba(12,15,22,.93);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 1.75rem;
+      padding: 0 2rem;
+    }
+    .nav-brand {
+      font-family: var(--mono); font-size: .78rem; font-weight: 500;
+      color: var(--accent); text-decoration: none; letter-spacing: .08em;
+      flex-shrink: 0;
+    }
+    .nav-links { display: flex; gap: 1.5rem; list-style: none; overflow-x: auto; }
+    .nav-links a {
+      font-family: var(--mono); font-size: .68rem; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--muted); text-decoration: none;
+      transition: color .18s; white-space: nowrap;
+    }
+    .nav-links a:hover { color: var(--accent-l); }
+
+    /* ── LAYOUT ── */
+    .wrap { max-width: 820px; margin: 0 auto; padding: 0 2rem; }
+
+    /* ── HEADER ── */
+    header { padding: 110px 0 3.5rem; border-bottom: 1px solid var(--border); }
+
+    .wip-badge {
+      display: inline-flex; align-items: center; gap: .45em;
+      font-family: var(--mono); font-size: .62rem; font-weight: 500;
+      letter-spacing: .14em; text-transform: uppercase;
+      color: var(--accent-l);
+      border: 1px solid var(--accent);
+      border-radius: 3px; padding: 2px 9px; margin-bottom: 1.4rem;
+    }
+    .wip-badge::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent-l);
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+    h1 {
+      font-family: var(--display);
+      font-size: clamp(1.9rem, 5vw, 3.1rem);
+      font-weight: 700; line-height: 1.15;
+      color: var(--text); margin-bottom: .4rem;
+    }
+    .paper-tag {
+      font-family: var(--mono); font-size: .82rem;
+      color: var(--accent); letter-spacing: .18em; margin-bottom: 2rem;
+    }
+    .author-block { margin-top: 1.75rem; }
+    .author { font-family: var(--display); font-style: italic; font-size: 1.05rem; }
+    .affil {
+      font-family: var(--mono); font-size: .68rem;
+      color: var(--muted); letter-spacing: .05em; margin-top: .2rem;
+    }
+    sup { color: var(--accent); font-size: .7em; }
+
+    /* ── SECTIONS ── */
+    section { margin: 4rem 0; }
+    h2 {
+      font-family: var(--display); font-size: 1.55rem; font-weight: 600;
+      color: var(--text); margin-bottom: 1.4rem;
+      padding-top: 1rem; border-top: 1px solid var(--border);
+    }
+    h2 .sn { color: var(--accent); font-size: .88em; margin-right: .45em; }
+    h3 {
+      font-family: var(--display); font-size: 1.1rem; font-weight: 600;
+      color: var(--muted); margin: 2.2rem 0 1rem;
+    }
+    p { margin-bottom: 1.2rem; }
+
+    /* ── ABSTRACT ── */
+    .abstract-box {
+      margin: 2.5rem 0;
+      padding: 2rem 2.4rem;
+      background: var(--surface);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 6px 6px 0;
+    }
+    .box-label {
+      font-family: var(--mono); font-size: .64rem; font-weight: 500;
+      text-transform: uppercase; letter-spacing: .16em;
+      color: var(--accent); margin-bottom: .9rem;
+    }
+
+    /* ── MATH BLOCKS ── */
+    .mathblock {
+      margin: 1.8rem 0; padding: 1.4rem 1.8rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; overflow-x: auto; text-align: center;
+    }
+    .mathblock.highlight {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+    }
+    .mathblock.gold-hl {
+      border-color: rgba(200,144,32,.3);
+      background: var(--gold-dim);
+    }
+
+    /* ── PROOF STEPS ── */
+    .proof-step {
+      margin: 1.1rem 0; padding-left: 1.4rem;
+      border-left: 2px solid var(--border2);
+    }
+    .proof-label {
+      font-family: var(--mono); font-size: .65rem; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--muted); margin-bottom: .3rem;
+    }
+
+    /* ── CALLOUT ── */
+    .callout {
+      margin: 1.8rem 0; padding: 1.15rem 1.5rem;
+      background: var(--accent-glow);
+      border: 1px solid rgba(32,168,200,.28);
+      border-radius: 6px; font-size: .97rem;
+    }
+    .callout strong { color: var(--accent-l); }
+
+    /* ── ALGO BOX ── */
+    .algo-box { margin: 2rem 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .algo-head {
+      background: var(--surface2); padding: .6rem 1.3rem;
+      font-family: var(--mono); font-size: .7rem;
+      color: var(--accent); letter-spacing: .1em; text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .algo-body {
+      font-family: var(--mono); font-size: .84rem; line-height: 2;
+      padding: 1.4rem 1.6rem; background: var(--surface); color: var(--text);
+    }
+    .c { color: var(--muted); }
+    .kw { color: var(--accent-l); }
+    .hi-r { color: var(--red); }
+    .hi-g { color: var(--green); }
+    .hi-b { color: var(--gold); }
+    .step-n { color: var(--accent); user-select: none; margin-right: .5em; }
+
+    /* ── PROPERTY LIST ── */
+    .prop-list {
+      margin: 1.5rem 0; padding: 1.4rem 1.8rem;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    }
+    .prop-list li {
+      list-style: none; padding-left: 1.6em; position: relative;
+      margin-bottom: .4rem;
+    }
+    .prop-list li::before {
+      content: '→'; position: absolute; left: 0; color: var(--accent);
+    }
+
+    /* ── CHARTS ── */
+    .chart-wrap {
+      margin: 2.2rem 0; padding: 1.4rem 1.5rem;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    }
+    .chart-title {
+      font-family: var(--mono); font-size: .7rem; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--muted); margin-bottom: .5rem;
+    }
+    .chart-sub {
+      font-size: .8rem; color: var(--dim); line-height: 1.5; margin-bottom: 1rem;
+    }
+    .chart-canvas { position: relative; height: 260px; }
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 2rem 0; }
+    @media (max-width: 620px) { .chart-grid { grid-template-columns: 1fr; } }
+
+    /* ── TABLE ── */
+    .compare-tbl { width: 100%; border-collapse: collapse; margin: 2rem 0; font-size: .88rem; border: 1px solid var(--border2); }
+    .compare-tbl th {
+      font-family: var(--mono); font-size: .67rem; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--text); padding: .8rem 1rem;
+      background: var(--surface2); border: 1px solid var(--border2); text-align: center;
+    }
+    .compare-tbl th:first-child { text-align: left; }
+    .compare-tbl td { padding: .7rem 1rem; border: 1px solid var(--border2); text-align: center; }
+    .compare-tbl td:first-child { text-align: left; font-size: .82rem; color: var(--muted); }
+    .compare-tbl tr:hover td { background: var(--surface); }
+    .yes { color: var(--green); font-weight: 600; }
+    .no  { color: var(--red); }
+    .part { color: var(--accent); }
+
+    /* ── CODE INLINE ── */
+    code {
+      font-family: var(--mono); font-size: .87em;
+      background: var(--surface2); color: var(--accent-l);
+      padding: .13em .4em; border-radius: 3px;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      margin-top: 5rem; padding: 2.5rem 0 4rem;
+      border-top: 1px solid var(--border);
+    }
+    .fn {
+      font-family: var(--mono); font-size: .72rem;
+      color: var(--muted); line-height: 1.9;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 620px) {
+      .wrap { padding: 0 1.2rem; }
+      nav   { padding: 0 1.2rem; gap: 1rem; }
+      .abstract-box { padding: 1.4rem; }
+      .algo-body { font-size: .76rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-brand">GWD</a>
+  <ul class="nav-links">
+    <li><a href="#abstract">Abstract</a></li>
+    <li><a href="#intro">Introduction</a></li>
+    <li><a href="#adam">1. Adam (Fisher WD)</a></li>
+    <li><a href="#signsgd">2. SignSGD (Signed L1)</a></li>
+    <li><a href="#sinksgd">3. SinkSGD (Structural)</a></li>
+    <li><a href="#normalization">4. The Transfer Trick</a></li>
+  </ul>
+</nav>
+
+<div class="wrap">
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header>
+  <div class="wip-badge">Work in Progress</div>
+  <h1>Geometric Weight Decay</h1>
+  <div class="paper-tag">GWD</div>
+  <div class="author-block">
+    <div class="author">Korata Hiu<sup>*</sup></div>
+    <div class="affil"><sup>*</sup> nickname — adv_optm dev</div>
+  </div>
+</header>
+
+<!-- ══════════════ ABSTRACT ══════════════ -->
+<section id="abstract">
+  <div class="abstract-box">
+    <div class="box-label">Abstract</div>
+    <p>Standard decoupled weight decay (AdamW style) applies a uniform, spherical $L_2$ penalty to all parameters. However, modern optimizers like Adam, SignSGD, and SinkSGD do not operate in a spherical geometry; they aggressively scale, or precondition gradients. Applying a Euclidean penalty in a non-Euclidean optimization space distorts the objective and fights the optimizer's preconditioner.</p>
+    <p>Geometric Weight Decay (GWD) maps the weight decay penalty through the exact same geometry used by the optimizer's update step. This accelerates convergence, prevents the optimizer from unraveling useful structural representations, and widens the optimal hyperparameter range. We introduce GWD implementations for Adam (Fisher WD), SignSGD (Signed L1), and SinkSGD (Structural balance), alongside a mathematical normalization trick to guarantee drop-in compatibility with existing standard weight decay hyperparameters.</p>
+  </div>
+</section>
+
+<!-- ══════════════ INTRODUCTION ══════════════ -->
+<section id="intro">
+  <h2><span class="sn">§ 0</span> The Problem with $L_2$ Regularization</h2>
+
+  <p>Weight decay is conventionally implemented as an $L_2$ penalty: $\lambda \| \theta \|_2^2$, which yields a gradient of $2\lambda \theta$. In the context of standard SGD, this pulls all weights toward zero at a rate proportional to their magnitude. The parameter space is treated as perfectly isotropic (spherical).</p>
+
+  <p>But adaptive optimizers warp this space. Adam stretches coordinates inversely proportional to gradient variance. SignSGD maps the entire continuous space onto a discrete hypercube. Sinkhorn optimizers impose matrix-level structural constraints. When you apply a standard $L_2$ decay step inside these optimizers, you are applying a <em>spherical</em> prior to a <em>warped</em> space. The regularizer actively fights the preconditioner.</p>
+
+  <div class="callout">
+    <strong>The Core Principle:</strong> If an optimizer scales the gradient $g$ by a preconditioning matrix $P^{-1}$, it must also scale the weight decay penalty by the same $P^{-1}$. The prior must live in the same geometry as the likelihood.
+  </div>
+</section>
+
+<!-- ══════════════ §1 ADAM (FISHER) ══════════════ -->
+<section id="adam">
+  <h2><span class="sn">§ 1</span> Adam: Fisher Weight Decay</h2>
+
+  <p>Adam pre-conditions updates using the square root of the uncentered variance, $v_t$. In a natural gradient context, $v_t$ acts as a diagonal approximation of the empirical Fisher Information Matrix. Standard decoupled weight decay (AdamW) bypasses this preconditioner:</p>
+
+  <div class="mathblock">
+    $$ \theta_{t} = \theta_{t-1} - \eta \left( \frac{m_t}{\sqrt{v_t} + \epsilon} + \lambda \theta_{t-1} \right) \quad \text{(AdamW)} $$
+  </div>
+
+  <p>Notice that the gradient $m_t$ is scaled by $1/\sqrt{v_t}$, but the penalty $\lambda \theta_{t-1}$ is not. To geometrically align the weight decay, we must map the decay step through the same empirical Fisher diagonal:</p>
+
+  <div class="proof-step">
+    <div class="proof-label">Geometric Alignment</div>
+    $$ \theta_{t} = \theta_{t-1} - \eta \left( \frac{1}{\sqrt{v_t} + \epsilon} \odot \left[ m_t + \lambda \theta_{t-1} \right] \right) $$
+  </div>
+
+  <p>By pulling the $1/\sqrt{v_t}$ term out, the effective penalty applied to the weights becomes $\lambda / \sqrt{v_t}$. We call this <strong>Fisher Weight Decay</strong>.</p>
+
+  <ul class="prop-list">
+    <li><strong>Noisy/Uncertain parameters (High $v_t$):</strong> The decay is <em>suppressed</em>. The optimizer recognizes the signal is noisy and protects the weight from being aggressively decayed.</li>
+    <li><strong>Confident/Consistent parameters (Low $v_t$):</strong> The decay is <em>amplified</em>. The optimizer is highly certain about this coordinate, so it can afford to regularize it strictly.</li>
+  </ul>
+
+  <div class="chart-wrap">
+    <div class="chart-title">Fig. 1 — Fisher GWD vs Standard AdamW Decay</div>
+    <div class="chart-sub">Standard WD applies a flat 1.0 multiplier regardless of variance. Fisher GWD applies an inverse-square-root curve, protecting noisy weights and penalizing certain ones.</div>
+    <div class="chart-canvas"><canvas id="chart-adam"></canvas></div>
+  </div>
+</section>
+
+<!-- ══════════════ §2 SIGNSGD ══════════════ -->
+<section id="signsgd">
+  <h2><span class="sn">§ 2</span> SignSGD: Signed $L_1$ Penalty</h2>
+
+  <p>SignSGD discards gradient magnitudes entirely, outputting only $\pm 1$ updates. The underlying assumption is that the geometry of the optimization space is a discrete hypercube. Applying standard continuous $L_2$ weight decay ($\lambda \theta$) introduces arbitrary, continuous magnitude scaling back into the update, breaking the scale invariance of the optimizer.</p>
+
+  <p>If the gradient update maps to $\operatorname{sign}(g)$, the corresponding geometric weight decay must map to the same discrete space:</p>
+
+  <div class="mathblock highlight">
+    $$ \text{target}_{\text{GWD}} = \operatorname{sign}(\theta) $$
+  </div>
+
+  <p>Instead of decaying weights by a percentage of their magnitude, GWD for SignSGD pulls weights towards zero by a <em>constant, discrete step</em>, exactly mirroring how the optimizer navigates the loss landscape. This equates to an $L_1$ penalty in the original loss formulation.</p>
+
+  <div class="chart-wrap">
+    <div class="chart-title">Fig. 2 — Signed L1 (GWD) vs Proportional L2 (Standard)</div>
+    <div class="chart-sub">For SignSGD, GWD asserts a constant $\pm 1$ pressure (gold), matching the optimizer's $\pm 1$ gradients, whereas L2 decay (blue) asserts pressure based on magnitude.</div>
+    <div class="chart-canvas"><canvas id="chart-signsgd"></canvas></div>
+  </div>
+</section>
+
+<!-- ══════════════ §3 SINKSGD ══════════════ -->
+<section id="sinksgd">
+  <h2><span class="sn">§ 3</span> SinkSGD: Structural Balance</h2>
+
+  <p>SinkSGD utilizes Sinkhorn iterations to uniformly distribute update magnitudes across the rows and columns of a weight matrix. It normalizes by row norms ($\|R_i\|$) and column norms ($\|C_j\|$). A standard $L_2$ weight decay ignores this structure, blindly penalizing weights regardless of their position in the matrix.</p>
+
+  <p>GWD for SinkSGD constructs a <strong>Structural Scaler</strong> based on the exact same row and column norms used during the gradient preconditioning:</p>
+
+  <div class="mathblock gold-hl">
+    $$ \text{scaler}_{i,j} = \sqrt{\|R_i\|_2 \cdot \|C_j\|_2} $$
+    <div style="font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-top:.8rem;">
+      Applied element-wise to the matrix.
+    </div>
+  </div>
+
+  <p>This penalty is highly structural. If a weight belongs to a dominant, highly utilized row and a highly utilized column, the scaler is large, and the weight is penalized heavily. Conversely, weights in underutilized rows/columns are shielded from decay, naturally balancing the representational capacity of the network layer.</p>
+
+  <div class="chart-wrap">
+    <div class="chart-title">Fig. 3 — SinkSGD Structural Scaler</div>
+    <div class="chart-sub">The penalty applied to a weight scales with the geometric mean of its row and column norms. Weights in highly utilized (dominant) paths face stronger regularization.</div>
+    <div class="chart-canvas"><canvas id="chart-sinksgd"></canvas></div>
+  </div>
+</section>
+
+<!-- ══════════════ §4 THE TRANSFER TRICK ══════════════ -->
+<section id="normalization">
+  <h2><span class="sn">§ 4</span> The Transfer Trick (Normalization)</h2>
+
+  <p>A major practical issue with introducing new weight decay formulas is that it <strong>breaks existing hyperparameters</strong>. If a user found $\lambda = 0.01$ optimal for AdamW, switching to Fisher GWD changes the global magnitude of the decay, requiring a complete retuning of $\lambda$.</p>
+
+  <p>To solve this, we introduce a mathematical trick: <strong>Norm Matching</strong>. We dynamically scale the GWD penalty so that its global strength (average magnitude) is exactly equal to the standard L2 penalty. This ensures zero-shot hyperparameter transferability.</p>
+
+  <h3>For Directional Targets (SignSGD):</h3>
+  <p>We scale the new geometric target to match the $L_2$ norm of the original parameter tensor:</p>
+  <div class="proof-step">
+    $$ \widetilde{D}_{\text{geo}} = D_{\text{geo}} \cdot \frac{\|\theta\|_2}{\|D_{\text{geo}}\|_2} $$
+  </div>
+
+  <h3>For Scalers (Adam / SinkSGD):</h3>
+  <p>We normalize the scaler matrix so its mean is exactly $1.0$. This guarantees that, on average, the exact same amount of weight decay is applied as in standard AdamW, just redistributed according to the geometry.</p>
+  <div class="proof-step">
+    $$ \widetilde{S} = \frac{S}{\operatorname{mean}(S)} $$
+  </div>
+
+  <div class="algo-box">
+    <div class="algo-head">Algorithm — Generic GWD Implementation</div>
+    <div class="algo-body">
+      <div><span class="c">// 1. Adam (Fisher WD Scaler)</span></div>
+      <div>wd_scaler = <span class="kw">1.0</span> / sqrt(v_t)</div>
+      <div>wd_scaler = wd_scaler / wd_scaler.mean()           <span class="c">← The Transfer Trick</span></div>
+      <div>update = (m_t / sqrt(v_t)) + (λ * <span class="hi-g">wd_scaler</span> * θ)</div>
+      <br>
+      <div><span class="c">// 2. SignSGD (Signed Target)</span></div>
+      <div>target = sign(θ)</div>
+      <div>target = target * (norm(θ) / norm(target))         <span class="c">← The Transfer Trick</span></div>
+      <div>update = sign(g_t) + (λ * <span class="hi-g">target</span>)</div>
+      <br>
+      <div><span class="c">// 3. SinkSGD (Structural Scaler)</span></div>
+      <div>scaler = sqrt(row_norms(θ) * col_norms(θ))</div>
+      <div>scaler = scaler / scaler.mean()                    <span class="c">← The Transfer Trick</span></div>
+      <div>update = sinkhorn(g_t) + (λ * <span class="hi-g">scaler</span> * θ)</div>
+    </div>
+  </div>
+
+  <table class="compare-tbl">
+    <thead>
+      <tr>
+        <th>Property</th>
+        <th>Standard $L_2$ Decay</th>
+        <th>Geometric WD (GWD)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Space Geometry</td>
+        <td>Strictly Spherical (Euclidean)</td>
+        <td class="yes">Matches Optimizer (Warped/Discrete)</td>
+      </tr>
+      <tr>
+        <td>Variance-aware</td>
+        <td class="no">✗</td>
+        <td class="yes">✓ (Protects noisy dimensions)</td>
+      </tr>
+      <tr>
+        <td>Structural awareness</td>
+        <td class="no">✗</td>
+        <td class="yes">✓ (Balances rows/cols in matrix)</td>
+      </tr>
+      <tr>
+        <td>Hyperparameter tuning</td>
+        <td>Baseline $\lambda$</td>
+        <td class="yes">Plug-and-play (via Transfer Trick)</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════ FOOTER ══════════════ -->
+<footer>
+  <div class="fn">
+    <div>† Formulated from theoretical principles of preconditioner alignment.</div>
+    <div style="margin-top:.4rem; color:var(--dim)">GWD · adv_optm dev · Work in Progress</div>
+  </div>
+</footer>
+
+</div><!-- .wrap -->
+
+<!-- ══════════════ CHARTS ══════════════ -->
+<script>
+(function () {
+  /* ── shared theme ── */
+  const T = {
+    gridColor:   'rgba(255,255,255,0.045)',
+    tickColor:   '#3d4d5e',
+    tickFont:    { family: "'JetBrains Mono', monospace", size: 10 },
+    legendFont:  { family: "'JetBrains Mono', monospace", size: 11 },
+    tooltip: {
+      backgroundColor: '#111620', titleColor: '#d8e4f0',
+      bodyColor: '#6d7e94', borderColor: '#22293a', borderWidth: 1
+    }
+  };
+
+  function baseOpts(xTitle, yTitle, yMin, yMax) {
+    return {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: {
+        legend: { labels: { color: T.tickColor, font: T.legendFont, boxWidth: 14, padding: 14 } },
+        tooltip: T.tooltip
+      },
+      scales: {
+        x: {
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont, maxTicksLimit: 10 },
+          title: { display: !!xTitle, text: xTitle, color: T.tickColor, font: T.tickFont }
+        },
+        y: {
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: !!yTitle, text: yTitle, color: T.tickColor, font: T.tickFont },
+          ...(yMin !== undefined ? { min: yMin } : {}),
+          ...(yMax !== undefined ? { max: yMax } : {})
+        }
+      }
+    };
+  }
+
+  /* ─────────────────────────────────────────
+     Chart 1 — Adam GWD (1/sqrt(v)) vs Standard
+  ───────────────────────────────────────── */
+  const adamPoints = 100;
+  const vVals = Array.from({ length: adamPoints }, (_, i) => 0.05 + (i * 1.95) / (adamPoints - 1)); // v from 0.05 to 2.0
+  
+  // Calculate raw 1/sqrt(v)
+  const rawScaler = vVals.map(v => 1.0 / Math.sqrt(v));
+  // Apply Transfer Trick (Mean = 1)
+  const meanScaler = rawScaler.reduce((a, b) => a + b, 0) / rawScaler.length;
+  const normalizedScaler = rawScaler.map(s => +(s / meanScaler).toFixed(4));
+  
+  const fisherData = vVals.map((v, i) => ({ x: +v.toFixed(3), y: normalizedScaler[i] }));
+  const standardData = vVals.map(v => ({ x: +v.toFixed(3), y: 1.0 }));
+
+  new Chart(document.getElementById('chart-adam'), {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Fisher GWD (Normalized 1 / √v)',
+          data: fisherData,
+          borderColor: '#20a8c8', backgroundColor: 'transparent',
+          borderWidth: 2.5, pointRadius: 0, tension: 0.3
+        },
+        {
+          label: 'Standard L2 (AdamW)',
+          data: standardData,
+          borderColor: '#6d7e94', backgroundColor: 'transparent',
+          borderWidth: 1.5, borderDash: [5, 5], pointRadius: 0, tension: 0
+        }
+      ]
+    },
+    options: {
+      ...baseOpts('Variance (v_t)', 'WD Multiplier', 0, 2.5),
+      scales: {
+        x: {
+          type: 'linear', min: 0, max: 2,
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Gradient Variance (v_t)', color: T.tickColor, font: T.tickFont }
+        },
+        y: {
+          type: 'linear', min: 0, max: 2.5,
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Weight Decay Scaler', color: T.tickColor, font: T.tickFont }
+        }
+      }
+    }
+  });
+
+  /* ─────────────────────────────────────────
+     Chart 2 — SignSGD GWD (Sign) vs Standard
+  ───────────────────────────────────────── */
+  const N = 201;
+  const pVals = Array.from({ length: N }, (_, i) => -2 + i * 4 / (N - 1));
+
+  const signData = pVals.map(p => ({
+    x: +p.toFixed(3),
+    y: p === 0 ? 0 : Math.sign(p) // Using Math.sign for visual step
+  }));
+  const linearData = pVals.map(p => ({ x: +p.toFixed(3), y: +p.toFixed(3) }));
+
+  new Chart(document.getElementById('chart-signsgd'), {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'Signed L1 Target (GWD)',
+          data: signData,
+          borderColor: '#c89020', backgroundColor: 'transparent',
+          borderWidth: 2.5, pointRadius: 0,
+          showLine: true, tension: 0
+        },
+        {
+          label: 'Proportional L2 (Standard)',
+          data: linearData,
+          borderColor: '#6d7e94', backgroundColor: 'transparent',
+          borderWidth: 1.5, borderDash: [5, 5], pointRadius: 0,
+          showLine: true, tension: 0
+        }
+      ]
+    },
+    options: {
+      ...baseOpts('Parameter value (θ)', 'Decay Target / Direction'),
+      scales: {
+        x: {
+          type: 'linear', min: -2, max: 2,
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Parameter value (θ)', color: T.tickColor, font: T.tickFont }
+        },
+        y: {
+          type: 'linear', min: -2.1, max: 2.1,
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Decay Target', color: T.tickColor, font: T.tickFont }
+        }
+      }
+    }
+  });
+
+  /* ─────────────────────────────────────────
+     Chart 3 — SinkSGD GWD (Structural Scaler)
+  ───────────────────────────────────────── */
+  const rowNorms = Array.from({ length: 50 }, (_, i) => 0.1 + (i * 2.4) / 49); // 0.1 to 2.5
+
+  const colNorm05 = rowNorms.map(r => ({ x: +r.toFixed(2), y: Math.sqrt(r * 0.5) }));
+  const colNorm10 = rowNorms.map(r => ({ x: +r.toFixed(2), y: Math.sqrt(r * 1.0) }));
+  const colNorm25 = rowNorms.map(r => ({ x: +r.toFixed(2), y: Math.sqrt(r * 2.5) }));
+
+  new Chart(document.getElementById('chart-sinksgd'), {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Dominant Col (||C|| = 2.5)',
+          data: colNorm25,
+          borderColor: '#f87171', backgroundColor: 'transparent',
+          borderWidth: 2, pointRadius: 0, tension: 0.3
+        },
+        {
+          label: 'Average Col (||C|| = 1.0)',
+          data: colNorm10,
+          borderColor: '#4ade80', backgroundColor: 'transparent',
+          borderWidth: 2, pointRadius: 0, tension: 0.3
+        },
+        {
+          label: 'Underutilized Col (||C|| = 0.5)',
+          data: colNorm05,
+          borderColor: '#5b9cf6', backgroundColor: 'transparent',
+          borderWidth: 2, pointRadius: 0, tension: 0.3
+        }
+      ]
+    },
+    options: {
+      ...baseOpts('Row Norm ||R||', 'Structural Scaler'),
+      scales: {
+        x: {
+          type: 'linear', min: 0, max: 2.5,
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Row Norm ||R_i||', color: T.tickColor, font: T.tickFont }
+        },
+        y: {
+          type: 'linear', min: 0, max: 2.6,
+          grid: { color: T.gridColor },
+          ticks: { color: T.tickColor, font: T.tickFont },
+          title: { display: true, text: 'Scaler Magnitude', color: T.tickColor, font: T.tickFont }
+        }
+      }
+    }
+  });
+
+})();
+</script>
+
+</body>
+</html>
