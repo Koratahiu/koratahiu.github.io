@@ -408,7 +408,7 @@
       <div style="padding-left:2em">
         <div><span class="step-n">1.</span>y_oft = OFT_forward(x)                        <span class="c">← Compute X * (W R^T)^T</span></div>
         <br>
-        <div><span class="step-n">2.</span><span class="c">// Add eps to prevent division by zero on dead neurons</span></div>
+        <div><span class="step-n">2.</span><span class="c">// DoRA scale</span></div>
         <div>&nbsp;&nbsp;&nbsp;scale = dora_scale / (initial_norm + <span class="hi-p">eps</span>)</div>
         <br>
         <div><span class="step-n">3.</span>y_doft = y_oft * scale.to(y_oft.dtype)        <span class="c">← Apply DoRA scaling to output</span></div>
