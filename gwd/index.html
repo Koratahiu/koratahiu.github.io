@@ -333,6 +333,7 @@
   </div>
 
   <p>By pulling the $1/\sqrt{v_t}$ term out, the effective penalty applied to the weights becomes $\lambda / \sqrt{v_t}$. We call this <strong>Fisher Weight Decay</strong>.</p>
+  <p>This was proposed in the paper: 'FAdam: Adam is a natural gradient optimizer using diagonal empirical Fisher information'</p>
 
   <ul class="prop-list">
     <li><strong>Noisy/Uncertain parameters (High $v_t$):</strong> The decay is <em>suppressed</em>. The optimizer recognizes the signal is noisy and protects the weight from being aggressively decayed.</li>
