@@ -1,6 +1,6 @@
 # My Website
 
-Posts about Optimization techniques:
+Posts about my optimization techniques:
 1. [AASS - Accelerated Arcsine SignSGD](https://koratahiu.github.io/aass/)
 2. [Sink-Z - Zero-Overhead Adaptive Preconditioning via Sinkhorn Geometry](https://koratahiu.github.io/sink-v)
 3. [GWD - Geometric Weight Decay](https://koratahiu.github.io/gwd)
