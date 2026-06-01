@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Sink-Ortho: Iterative Row and Column Orthogonal Gradient Projection.">
+  <title>Sink-Ortho — Iterative Matrix OrthoGrad</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            serif: ['Lora', 'serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              400: '#2dd4bf',
+              500: '#14b8a6',
+              600: '#0d9488',
+              900: '#134e4a',
+            },
+            surface: {
+              100: '#1e293b',
+              200: '#334155',
+              300: '#475569',
+              900: '#0f172a'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- MathJax -->
+  <script>
+    MathJax = {
+      tex: { 
+        inlineMath: [['\\(','\\)']], 
+        displayMath: [['$$','$$']], 
+        processEscapes: true 
+      },
+      chtml: {
+        scale: 1,
+        matchFontHeight: true
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    body { background-color: #020617; color: #f8fafc; }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    }
+    .text-gradient {
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-image: linear-gradient(to right, #2dd4bf, #3b82f6);
+    }
+    mjx-container {
+      color: inherit !important;
+    }
+  </style>
+</head>
+<body class="antialiased min-h-screen selection:bg-brand-500 selection:text-white">
+
+  <!-- Navigation / Header -->
+  <header class="fixed top-0 w-full z-50 glass-card border-b border-surface-200">
+    <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div class="font-bold text-xl tracking-tight text-white flex items-center gap-2">
+        <svg class="w-6 h-6 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>
+        Sink-Ortho
+      </div>
+      <nav class="hidden md:flex gap-6 text-sm font-medium text-slate-300">
+        <a href="#motivation" class="hover:text-brand-400 transition">Motivation</a>
+        <a href="#theory" class="hover:text-brand-400 transition">Math & Algorithm</a>
+        <a href="#results" class="hover:text-brand-400 transition">Convergence</a>
+        <a href="#implementations" class="hover:text-brand-400 transition">Versions</a>
+        <a href="#code" class="hover:text-brand-400 transition">Code</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="pt-32 pb-20 max-w-5xl mx-auto px-6 space-y-24">
+    
+    <!-- Hero Section -->
+    <section class="text-center space-y-6">
+      <h1 class="text-5xl md:text-6xl font-bold tracking-tight text-white leading-tight">
+        Closing the Gap with <br> <span class="text-gradient">Sink-Ortho Projection</span>
+      </h1>
+
+      <div class="flex flex-col items-center justify-center space-y-1.5 py-4">
+        <p class="text-lg font-medium text-slate-200">Korata Hiu</p>
+        <p class="text-sm text-brand-400 font-mono">adv_optm dev &middot; Work in Progress</p>
+        <p class="text-xs text-slate-500 italic max-w-md mx-auto pt-2">
+          &dagger; Implementation in <a href="https://github.com/Koratahiu/Advanced_Optimizers" target="_blank" class="text-link" style="color: #3b82f6;">adv_optm library</a> .
+        </p>
+        <p class="text-xs text-slate-500 italic max-w-md mx-auto pt-2">
+          &dagger; Handwritten. Grammar-corrected by AI, with self-review by the author.
+        </p>
+      </div>
+
+      <p class="text-xl text-slate-400 max-w-3xl mx-auto font-serif">
+        An iterative row and column gradient normalization technique that closes the gap between expensive exact matrix-wise projection and cheap vectorized OrthoGrad.
+      </p>
+    </section>
+
+    <!-- Motivation & Raw Writing -->
+    <section id="motivation" class="glass-card rounded-2xl p-8 md:p-10">
+      <h2 class="text-2xl font-semibold mb-6 flex items-center gap-3">
+        <span class="bg-surface-200 p-2 rounded-lg"><svg class="w-5 h-5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg></span>
+        Motivation & Background
+      </h2>
+      <div class="prose prose-invert prose-lg max-w-none text-slate-300">
+        <p>
+          Manifold projection of gradients has been proposed in literature to enforce geometric regularization, leading to better generalization and serving as a replacement for standard L<sub>2</sub> regularization. However, current manifold projections are constrained by computational costs: they are typically applied either as a simple scalar or fully vectorized.
+        </p>
+        <p>
+          Exact matrix-wise projection is prohibitively expensive to compute on large layers. Consequently, methods like <strong>OrthoGrad</strong> (Prieto et al., 2025) rely on a vectorized process that flattens both the weight and the gradient into large 1D vectors. While efficient, this <em>fails to capture the inherent row and column structural dynamics</em> of Deep Neural Network (DNN) layers.
+        </p>
+        <p>
+          Inspired by <strong>SinkGD</strong> (Scetbon et al., 2025), which applies iterative row and column normalization, we propose <strong>iterative row and column OrthoGrad (Sink-Ortho)</strong>. It achieves numerical convergence in just 4-5 iterations, arriving at a state where all rows and columns of the gradient are orthogonal to the current weight matrix. Sink-Ortho requires only L<sub>2</sub> norm calculations and targeted projections, making it exceptionally fast while behaving effectively as a rank-2 matrix-wise OrthoGrad.
+        </p>
+      </div>
+    </section>
+
+    <!-- Math Proof & Algorithm -->
+    <section id="theory" class="grid lg:grid-cols-2 gap-8">
+      
+      <!-- Mathematical Proof -->
+      <div class="glass-card rounded-2xl p-8">
+        <h3 class="text-xl font-semibold mb-4 text-white">Mathematical Proof of Convergence</h3>
+        <p class="text-slate-400 mb-4 text-sm">
+          Let the weight matrix be \( W \in \mathbb{R}^{m \times n} \) and the gradient be \( G \in \mathbb{R}^{m \times n} \). We seek a projected gradient \( \tilde{G} \) that is simultaneously orthogonal to the rows and columns of \( W \).
+        </p>
+        <div class="bg-surface-900 rounded-xl p-4 mb-4 border border-surface-200 overflow-x-auto text-sm">
+          <p class="mb-2">Define two closed subspaces for the update matrix \( \Delta \):</p>
+          <ul class="list-disc pl-5 space-y-2 mb-4">
+            <li>Row-orthogonal subspace \( \mathcal{S}_R = \{ \Delta : \langle \Delta_{i,:}, W_{i,:} \rangle = 0 \quad \forall i \} \)</li>
+            <li>Col-orthogonal subspace \( \mathcal{S}_C = \{ \Delta : \langle \Delta_{:,j}, W_{:,j} \rangle = 0 \quad \forall j \} \)</li>
+          </ul>
+          <p>
+            By <strong>Von Neumann's Alternating Projection Theorem</strong>, given two closed subspaces \( \mathcal{S}_R \) and \( \mathcal{S}_C \) in a Hilbert space, the sequence obtained by alternately projecting a point onto \( \mathcal{S}_R \) and \( \mathcal{S}_C \) converges strongly to the orthogonal projection onto their intersection \( \mathcal{S}_R \cap \mathcal{S}_C \).
+          </p>
+          $$ \lim_{k \to \infty} (\Pi_{\mathcal{S}_C} \Pi_{\mathcal{S}_R})^k(G) = \Pi_{\mathcal{S}_R \cap \mathcal{S}_C}(G) $$
+        </div>
+        <p class="text-slate-400 text-sm">
+          This alternating projection algorithm converges to machine precision (e.g., \( < 10^{-8} \) cosine similarity) in just <strong>4 to 5 iterations</strong>.
+        </p>
+
+        <!-- Visual Proof Image Placeholder (If present in user's directory) -->
+        <div class="mt-6 rounded-xl overflow-hidden border border-surface-200 bg-surface-900">
+           <img src="OrthoGrad_Visual_Proof.jpg" alt="Visual Proof of OrthoGrad" onerror="this.style.display='none'" class="w-full object-cover opacity-90 hover:opacity-100 transition duration-300">
+        </div>
+      </div>
+
+      <!-- Algorithm -->
+      <div class="glass-card rounded-2xl p-8 flex flex-col">
+        <h3 class="text-xl font-semibold mb-4 text-white">Algorithm: Sink-Ortho</h3>
+        <p class="text-slate-400 mb-4 text-sm">
+          The alternating 1D projections update the gradient over \( K \) iterations.
+        </p>
+        <div class="bg-surface-900 rounded-xl p-5 border border-surface-200 font-mono text-sm text-slate-300 flex-grow shadow-inner overflow-x-auto">
+          <span class="text-brand-400">Require:</span> Weight \( W \in \mathbb{R}^{m \times n} \), Gradient \( G \in \mathbb{R}^{m \times n} \), Iterations \( K \)<br><br>
+          <span class="text-slate-500"># Initialization</span><br>
+          \( \Delta^{(0)} \leftarrow G \)<br><br>
+          
+          <span class="text-brand-400">for</span> \( k = 1 \) to \( K \) <span class="text-brand-400">do</span><br>
+          &nbsp;&nbsp;<span class="text-slate-500"># 1. Project Rows (Dim 1)</span><br>
+          &nbsp;&nbsp;<span class="text-brand-400">for</span> \( i = 1 \) to \( m \) <span class="text-brand-400">do</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;\( proj \leftarrow \frac{\langle \Delta^{(k-1)}_{i,:}, W_{i,:} \rangle}{||W_{i,:}||^2_2 + \epsilon} \)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;\( \tilde{\Delta}_{i,:} \leftarrow \Delta^{(k-1)}_{i,:} - proj \cdot W_{i,:} \)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="text-slate-500"># (Optional) Restore structural magnitude</span><br>
+          &nbsp;&nbsp;<span class="text-brand-400">end for</span><br><br>
+
+          &nbsp;&nbsp;<span class="text-slate-500"># 2. Project Columns (Dim 0)</span><br>
+          &nbsp;&nbsp;<span class="text-brand-400">for</span> \( j = 1 \) to \( n \) <span class="text-brand-400">do</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;\( proj \leftarrow \frac{\langle \tilde{\Delta}_{:,j}, W_{:,j} \rangle}{||W_{:,j}||^2_2 + \epsilon} \)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;\( \Delta^{(k)}_{:,j} \leftarrow \tilde{\Delta}_{:,j} - proj \cdot W_{:,j} \)<br>
+          &nbsp;&nbsp;<span class="text-brand-400">end for</span><br>
+          <span class="text-brand-400">end for</span><br><br>
+          
+          <span class="text-brand-400">Return:</span> \( \Delta^{(K)} \)
+        </div>
+      </div>
+    </section>
+
+    <!-- Convergence Chart -->
+    <section id="results" class="glass-card rounded-2xl p-8 md:p-10">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div>
+          <h2 class="text-2xl font-semibold text-white">Convergence Analysis</h2>
+          <p class="text-slate-400 mt-1">Mean Absolute Cosine Similarity over Iterations (Log Scale)</p>
+        </div>
+      </div>
+      
+      <div class="relative w-full h-[400px]">
+        <canvas id="convergenceChart"></canvas>
+      </div>
+
+      <div class="mt-6 text-sm text-slate-400 grid md:grid-cols-3 gap-4">
+        <div class="bg-surface-900/50 p-4 rounded-lg border border-surface-200">
+          <strong class="text-white block mb-1">Iteration 0 (Raw)</strong>
+          Row Sim: \( \approx 4.89 \times 10^{-2} \)<br>
+          Col Sim: \( \approx 4.85 \times 10^{-2} \)
+        </div>
+        <div class="bg-surface-900/50 p-4 rounded-lg border border-surface-200">
+          <strong class="text-white block mb-1">Iteration 1 (Standard Scalar)</strong>
+          Row Sim: \( \approx 4.90 \times 10^{-2} \)<br>
+          Col Sim: \( \approx 4.83 \times 10^{-2} \)
+        </div>
+        <div class="bg-brand-900/30 p-4 rounded-lg border border-brand-500/30">
+          <strong class="text-brand-400 block mb-1">Iteration 5 (Sink-Ortho)</strong>
+          Row Sim: \( \approx 4.45 \times 10^{-9} \)<br>
+          Col Sim: \( \approx 6.38 \times 10^{-9} \)
+        </div>
+      </div>
+    </section>
+
+    <!-- Two Versions -->
+    <section id="implementations" class="space-y-8">
+      <h2 class="text-3xl font-bold text-center text-white mb-10">Proposed Implementations</h2>
+      <div class="grid md:grid-cols-2 gap-8">
+        
+        <!-- Standalone -->
+        <div class="glass-card rounded-2xl p-8 border-t-4 border-t-blue-500 relative overflow-hidden group">
+          <div class="absolute -right-10 -top-10 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition duration-500"></div>
+          <h3 class="text-2xl font-bold text-white mb-3">Standalone Sink-Ortho</h3>
+          <p class="text-slate-300 leading-relaxed">
+            Can be applied as a drop-in regularization technique for <strong>any standard optimizer</strong> (AdamW, SGD, etc.). It intercepts the raw gradient, applies the iterative alternating L<sub>2</sub> projections, and passes the purely orthogonalized gradient to the optimizer step.
+          </p>
+          <ul class="mt-6 space-y-2 text-sm text-slate-400">
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg> Optimizer Agnostic</li>
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg> Replaces Weight Decay / L<sub>2</sub></li>
+          </ul>
+        </div>
+
+        <!-- Integrated -->
+        <div class="glass-card rounded-2xl p-8 border-t-4 border-t-brand-400 relative overflow-hidden group">
+          <div class="absolute -right-10 -top-10 w-32 h-32 bg-brand-400/10 rounded-full blur-2xl group-hover:bg-brand-400/20 transition duration-500"></div>
+          <h3 class="text-2xl font-bold text-white mb-3">Integrated Sink-Ortho</h3>
+          <p class="text-slate-300 leading-relaxed">
+            Integrated natively inside the <strong>Sinkhorn operation of SinkGD</strong>. After any x-dim normalization step in SinkGD Sinkhorn, we apply the x-dim ortho projection. This executes in the <em>same number of iterations</em> as standard Sinkhorn, efficiently converging to both a Sinkhorn uniform state and Sink-Ortho state.
+          </p>
+          <ul class="mt-6 space-y-2 text-sm text-slate-400">
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-brand-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg> Simultaneous Norm & Geo Regularization</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- PyTorch Code Implementations -->
+    <section id="code" class="glass-card rounded-2xl p-8 md:p-10 space-y-8">
+      <h2 class="text-2xl font-semibold mb-2 flex items-center gap-3 text-white">
+        <span class="bg-surface-200 p-2 rounded-lg">
+          <svg class="w-5 h-5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+          </svg>
+        </span>
+        PyTorch Code Implementations
+      </h2>
+      
+      <div class="grid lg:grid-cols-2 gap-8">
+        
+        <!-- Standalone Sink-Ortho Code -->
+        <div class="space-y-3">
+          <h3 class="text-lg font-medium text-white">OrthoGrad.py (Standalone)</h3>
+          <div class="bg-[#0d1117] rounded-xl border border-surface-200 overflow-hidden shadow-lg">
+            <div class="flex items-center px-4 py-3 border-b border-surface-200 bg-surface-900/50">
+              <div class="flex gap-1.5">
+                <div class="w-3 h-3 rounded-full bg-red-500/80"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500/80"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500/80"></div>
+              </div>
+              <span class="ml-4 text-xs font-mono text-slate-400">OrthoGrad.py</span>
+            </div>
+            <pre class="p-5 overflow-x-auto text-xs text-slate-300 font-mono leading-relaxed"><code>import torch
+
+def iterative_ortho_project(p: torch.Tensor, update: torch.Tensor, 
+                            iters: int = 5) -> torch.Tensor:
+    """Applies iterative alternating orthogonal projection."""
+    original_shape = update.shape
+    param_2d = p.view(p.shape[0], -1).float()
+    update_2d = update.view(update.shape[0], -1).float()
+    m, n = update_2d.shape
+
+    # Optimize projection order based on aspect ratio
+    row_first = m > n
+    dim = 0 if row_first else 1
+
+    p_norm_sq_dim = torch.sum(param_2d**2, dim=dim, keepdim=True).add_(1e-30)
+    p_norm_sq_adim = torch.sum(param_2d**2, dim=1-dim, keepdim=True).add_(1e-30)
+
+    for _ in range(iters):
+        # First dimension
+        update_2d = _ortho_normed_dim(param_2d, update_2d, p_norm_sq_dim, dim)
+        # Second dimension
+        update_2d = _ortho_normed_dim(param_2d, update_2d, p_norm_sq_adim, 1 - dim)
+
+    return update_2d.view(original_shape)
+
+def _ortho_normed_dim(p_2d, update_2d, p_norm_sq, dim):
+    """Projects update to be orthogonal to p along 'dim'."""
+    proj = torch.sum(p_2d * update_2d, dim=dim, keepdim=True) / p_norm_sq
+    return update_2d - (proj * p_2d)</code></pre>
+          </div>
+        </div>
+
+        <!-- Integrated Sink-Ortho Code -->
+        <div class="space-y-3">
+          <h3 class="text-lg font-medium text-white">sinkhorn.py (Integrated)</h3>
+          <div class="bg-[#0d1117] rounded-xl border border-surface-200 overflow-hidden shadow-lg">
+            <div class="flex items-center px-4 py-3 border-b border-surface-200 bg-surface-900/50">
+              <div class="flex gap-1.5">
+                <div class="w-3 h-3 rounded-full bg-red-500/80"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500/80"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500/80"></div>
+              </div>
+              <span class="ml-4 text-xs font-mono text-slate-400">sinkhorn.py</span>
+            </div>
+            <pre class="p-5 overflow-x-auto text-xs text-slate-300 font-mono leading-relaxed"><code>import torch
+import math
+
+def apply_sr_sinkhorn(update: torch.Tensor, iters: int = 5, 
+                      p: torch.Tensor | None = None, 
+                      ortho_project: bool = False) -> torch.Tensor:
+    """Applies SR-Sinkhorn normalization with optional Ortho."""
+    original_shape = update.shape
+    original_dtype = update.dtype
+    update = update.float()
+
+    # 2D+ Matrix Case
+    update_2d = update.view(update.shape[0], -1)
+    
+    m, n = update_2d.shape
+
+    # Dynamically determine the order of normalization based on aspect ratio
+    # Normalizing the longer dimension first aids stability.
+    scale_cond = update_2d.shape[0] > update_2d.shape[1]
+    dim = 0 if scale_cond else 1
+
+
+    # Precompute scaling factors. 
+    scale_first = math.sqrt(m if scale_cond else n)
+    scale_second = math.sqrt(n if scale_cond else m)
+
+    if ortho_project:
+        param_2d = p.float().view(p.shape[0], -1)
+        p_norm_sq_dim = torch.sum(param_2d * param_2d, dim=dim, keepdim=True).add_(1e-30)
+        p_norm_sq_adim = torch.sum(param_2d * param_2d, dim=1-dim, keepdim=True).add_(1e-30)
+
+    # In-place alternating Sinkhorn normalization steps
+    for _ in range(iters):
+        # First normalization step
+        # Stability floor: equivalent to a single-element vector norm lower bound (lb)
+        norm1_lb = 1 / math.sqrt(update_2d.shape[dim])
+        norm1 = update_2d.norm(p=2, dim=dim, keepdim=True).clamp_min_(norm1_lb)
+        update_2d.mul_(scale_first / norm1)
+        if ortho_project:
+            update_2d = ortho_normed(param_2d, update_2d, p_norm_sq_dim, dim, scale_first)
+
+        # Second normalization step
+        norm2_lb = 1 / math.sqrt(update_2d.shape[1-dim])
+        norm2 = update_2d.norm(p=2, dim=1-dim, keepdim=True).clamp_min_(norm2_lb)
+        update_2d.mul_(scale_second / norm2)
+        if ortho_project:
+            update_2d = ortho_normed(param_2d, update_2d, p_norm_sq_adim, 1-dim, scale_second)
+    
+    return update_2d.view(original_shape).to(original_dtype)
+
+    def ortho_normed(p_2d, update_2d, p_norm_sq, dim, target_norm):
+        # Same as Standalone Sink-Ortho Code</code></pre>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- References -->
+    <section class="border-t border-surface-200 pt-10">
+      <h3 class="text-lg font-bold text-white mb-4">References</h3>
+      <ul class="space-y-4 text-sm text-slate-400 font-serif">
+        <li class="pl-4 border-l-2 border-slate-600">
+          Prieto, L., Barsbey, M., Mediano, P. A. M., & Birdal, T. (2025). <em>Grokking at the edge of numerical stability</em>. arXiv preprint. 
+          <a href="https://arxiv.org/abs/2501.04697" class="text-brand-400 hover:underline">arXiv:2501.04697</a>
+        </li>
+        <li class="pl-4 border-l-2 border-slate-600">
+          Scetbon, M., Ma, C., Gong, W., & Meeds, E. (2025). <em>Gradient Multi-Normalization for Stateless and Scalable LLM Training (Version 1)</em>. arXiv. 
+          <a href="https://doi.org/10.48550/ARXIV.2502.06742" class="text-brand-400 hover:underline">https://doi.org/10.48550/ARXIV.2502.06742</a>
+        </li>
+      </ul>
+    </section>
+
+  </main>
+
+  <footer class="bg-surface-900 border-t border-surface-200 py-8 text-center text-slate-500 text-sm">
+    <div class="max-w-5xl mx-auto px-6">
+      <p>&copy; 2026 Sink-Ortho Research. Data and algorithms based on provided specifications.</p>
+    </div>
+  </footer>
+
+  <!-- Chart Configuration -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Data extracted from OrthoGrad_Analysis.xlsx - Convergence_Data.csv
+      const labels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      const rowCosSim = [
+        6.763178e-09, 5.562763e-09, 5.409662e-09, 5.431600e-09, 4.459860e-09, 
+        3.563270e-09, 2.965460e-09, 2.533780e-09, 2.315570e-09, 2.087580e-09
+      ];
+      const colCosSim = [
+        4.113387e-03, 6.638598e-05, 1.453110e-06, 3.529020e-08, 6.383610e-09, 
+        4.404470e-09, 3.318520e-09, 2.869190e-09, 2.546250e-09, 2.432420e-09
+      ];
+
+      const ctx = document.getElementById('convergenceChart').getContext('2d');
+      
+      // Chart theme setup
+      Chart.defaults.color = '#94a3b8';
+      Chart.defaults.font.family = "'Inter', sans-serif";
+      
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Mean Abs Row Cosine Similarity',
+              data: rowCosSim,
+              borderColor: '#3b82f6', // Blue
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              borderWidth: 3,
+              pointBackgroundColor: '#1e293b',
+              pointBorderColor: '#3b82f6',
+              pointBorderWidth: 2,
+              pointRadius: 5,
+              pointHoverRadius: 7,
+              tension: 0.3,
+              fill: true
+            },
+            {
+              label: 'Mean Abs Col Cosine Similarity',
+              data: colCosSim,
+              borderColor: '#2dd4bf', // Teal/Brand
+              backgroundColor: 'rgba(45, 212, 191, 0.1)',
+              borderWidth: 3,
+              pointBackgroundColor: '#1e293b',
+              pointBorderColor: '#2dd4bf',
+              pointBorderWidth: 2,
+              pointRadius: 5,
+              pointHoverRadius: 7,
+              tension: 0.3,
+              fill: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                usePointStyle: true,
+                padding: 20,
+                font: { size: 13, weight: 500 }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.9)',
+              titleColor: '#fff',
+              bodyColor: '#cbd5e1',
+              borderColor: 'rgba(255,255,255,0.1)',
+              borderWidth: 1,
+              padding: 12,
+              callbacks: {
+                label: function(context) {
+                  return context.dataset.label + ': ' + context.parsed.y.toExponential(4);
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Projection Iterations',
+                font: { size: 14, weight: 600 },
+                color: '#e2e8f0'
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' }
+            },
+            y: {
+              type: 'logarithmic',
+              title: {
+                display: true,
+                text: 'Cosine Similarity (Log Scale)',
+                font: { size: 14, weight: 600 },
+                color: '#e2e8f0'
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+              ticks: {
+                callback: function(value, index, values) {
+                  return value.toExponential(0); // Display as 1e-X
+                }
+              }
+            }
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
