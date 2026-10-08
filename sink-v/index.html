@@ -388,7 +388,7 @@
     $$V_{\text{row}} = 1 - \frac{1}{d} \sum_{j=1}^{d} \mathbf{m}_{t,j}^2$$
   </div>
 
-  <p>This reveals a profound property: The expected variance of the gradient is an exact function of the spatial mean of the <em>squared momentum elements</em>. We extract the variance dynamically from the momentum buffer that we already track, with zero explicit variance state.</p>
+  <p>This reveals a profound property: The expected variance of the gradient is an exact function of the spatial mean of the <em>squared momentum elements</em>. We extract the variance dynamically from the momentum buffer that we already track.</p>
 </section>
 
 <!-- ══════════════ GEOMETRY ══════════════ -->
@@ -455,9 +455,9 @@
 
   <h3>System Advantages</h3>
   <ul class="prop-list">
-    <li><strong>Zero Extra Optimizer State:</strong> The variance is inferred instantly from the already-existing momentum <code>m_t</code>. No additional VRAM is allocated for variance tracking.</li>
-    <li><strong>Computational Elegance:</strong> The operation requires just a single square and reduction, bypassing the continuous moving average calculations required by Adam.</li>
-    <li><strong>Unconditionally Bounded:</strong> By employing $\text{atan2}$ coupled with the $4/\pi$ multiplier, the optimizer inherently restricts updates to a $[-2, 2]$ envelope, completely bypassing the instability of adaptive division.</li>
+    <li><strong>The variance is inferred instantly from the already-existing momentum <code>m_t</code></li>
+    <li><strong>Computational Elegance:</strong> The operation requires just a single square and reduction.</li>
+    <li><strong>Unconditionally Bounded:</strong> By employing $\text{atan2}$ coupled with the $4/\pi$ multiplier, the optimizer inherently restricts updates to a $[-2, 2]$ envelope, achieving scale-invariant updates.</li>
   </ul>
 </section>
 
