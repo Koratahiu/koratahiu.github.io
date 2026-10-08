@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Zero-Overhead Adaptive Preconditioning via Sinkhorn Geometry.">
-  <title>Sink-V — Zero-Overhead Variance</title>
+  <meta name="description" content="Adaptive Preconditioning via Sinkhorn Geometry.">
+  <title>Sink-V</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -270,11 +270,11 @@
 <!-- ══════════════ HEADER ══════════════ -->
 <header>
   <div class="wip-badge">Work in Progress</div>
-  <h1>Zero-Overhead Adaptive Preconditioning via Sinkhorn Geometry</h1>
+  <h1Adaptive Preconditioning via Sinkhorn Geometry</h1>
   <div class="paper-tag">SINK-V</div>
   <div class="author-block">
     <div class="author">Korata Hiu<sup>*</sup></div>
-    <div class="affil"><sup>*</sup> nickname — adv_optm dev</div>
+    <div class="affil"><sup>*</sup> nickname - adv_optm dev</div>
   </div>
 </header>
 
@@ -282,8 +282,8 @@
 <section id="abstract">
   <div class="abstract-box">
     <div class="box-label">Abstract</div>
-    <p><strong>SinkGD</strong> is an optimization algorithm that iteratively balances noise and signal by geometrically preconditioning gradient rows and columns to a uniform norm. While it effectively prevents vanishing or exploding updates across channels, standard SinkGD fundamentally lacks an adaptive variance mechanism to dampen noisy dimensions—a critical mechanism for stable convergence.</p>
-    <p>In this post, we propose two techniques to introduce precise variance preconditioning to SinkGD with zero memory overhead. First, we define <strong>Normalization-then-Momentum (NtM)</strong>, a structural shift that applies Sinkhorn normalization <em>before</em> momentum accumulation. Second, building strictly upon NtM's geometrical constraints, we introduce <strong>Sinkhorn Implicit Variance (SINK-V)</strong>. By guaranteeing that all incoming gradients lie on a unit hypersphere, we prove that exact, spatially-aware variance can be extracted dynamically from the momentum buffer's norm. This yields robust adaptivity without allocating any explicit trackers.</p>
+    <p><strong>SinkGD</strong> is an optimization algorithm that iteratively balances noise and signal by geometrically preconditioning gradient rows and columns to a uniform norm. While it effectively prevents vanishing or exploding updates across channels, standard SinkGD fundamentally lacks an adaptive variance mechanism to dampen noisy dimensions-a critical mechanism for stable convergence.</p>
+    <p>In this post, we propose two techniques to introduce precise variance preconditioning to SinkGD. First, we define <strong>Normalization-then-Momentum (NtM)</strong>, a structural shift that applies Sinkhorn normalization <em>before</em> momentum accumulation. Second, building strictly upon NtM's geometrical constraints, we introduce <strong>Sinkhorn Implicit Variance (SINK-V)</strong>. By guaranteeing that all incoming gradients lie on a unit hypersphere, we prove that exact, spatially-aware variance can be extracted dynamically from the momentum buffer's norm. This yields robust adaptivity without allocating any explicit trackers.</p>
   </div>
 </section>
 
@@ -307,7 +307,7 @@
   </div>
 
   <div class="algo-box">
-    <div class="algo-head">Algorithm — Standard SinkGD</div>
+    <div class="algo-head">Algorithm - Standard SinkGD</div>
     <div class="algo-body">
       <div><span class="c">// 1. Accumulate raw gradient into momentum</span></div>
       <div>m_t.lerp_(grad, 1 - beta)</div>
@@ -337,7 +337,7 @@
   </div>
 
   <div class="algo-box">
-    <div class="algo-head">Algorithm — Normalization-then-Momentum (NtM)</div>
+    <div class="algo-head">Algorithm - Normalization-then-Momentum (NtM)</div>
     <div class="algo-body">
       <div><span class="c">// 1. Apply Sinkhorn to the incoming raw gradient</span></div>
       <div>g_norm = apply_sr_sinkhorn(grad, iters=5)</div>
@@ -411,13 +411,13 @@
   </div>
 
   <div class="chart-wrap">
-    <div class="chart-title">Fig. 1 — Geometric Constraint</div>
+    <div class="chart-title">Fig. 1 - Geometric Constraint</div>
     <div class="chart-sub">Because Total Energy (RMS) is bounded to 1.0, as the Signal (Momentum squared) increases, Variance must decrease exactly proportionally.</div>
     <div class="chart-canvas"><canvas id="chart-pythagoras"></canvas></div>
   </div>
 
   <div class="chart-wrap">
-    <div class="chart-title">Fig. 2 — Update Magnitude Scaling & atan2 Bounding</div>
+    <div class="chart-title">Fig. 2 - Update Magnitude Scaling & atan2 Bounding</div>
     <div class="chart-sub">Comparing Pure NtM vs. SINK-V Preconditioning. Using <code>atan2</code> with the $4/\pi$ multiplier safely non-linearizes the update, bounding max output exactly to $[-2, 2]$.</div>
     <div class="chart-canvas"><canvas id="chart-scaling"></canvas></div>
   </div>
@@ -430,10 +430,10 @@
 
   <p>In standard adaptive optimizers like Adam, the update is computed using simple division: $\mathbf{m} / \sqrt{v}$. This division is notoriously unstable when variance approaches zero, requiring hyperparameter tuning of a small $\epsilon$ denominator to prevent explosion.</p>
 
-  <p>In SINK-V, we replace division entirely with the 2-argument arctangent: $\text{atan2}(\mathbf{m}, \sqrt{v})$. Because $\mathbf{m}$ and $v$ are geometrically strictly bound, $\text{atan2}$ cleanly scales confident signals while bounding the raw maximum step mathematically to $\pm \pi/2$. By multiplying the output by $4/\pi$, we map the effective update perfectly to a bounded $[-2, 2]$ range. This guarantees absolute numerical stability—zero division errors, and no $\epsilon$ tuning</p>
+  <p>In SINK-V, we replace division entirely with the 2-argument arctangent: $\text{atan2}(\mathbf{m}, \sqrt{v})$. Because $\mathbf{m}$ and $v$ are geometrically strictly bound, $\text{atan2}$ cleanly scales confident signals while bounding the raw maximum step mathematically to $\pm \pi/2$. By multiplying the output by $4/\pi$, we map the effective update perfectly to a bounded $[-2, 2]$ range. This guarantees absolute numerical stability-zero division errors, and no $\epsilon$ tuning</p>
 
   <div class="algo-box">
-    <div class="algo-head">Algorithm — Full NtM + SINK-V Optimizer Step</div>
+    <div class="algo-head">Algorithm - Full NtM + SINK-V Optimizer Step</div>
     <div class="algo-body">
       <div><span class="c">// 1. Normalization-then-Momentum (NtM)</span></div>
       <div>g_norm = apply_sr_sinkhorn(grad, iters=5)</div>
@@ -516,7 +516,7 @@
   }
 
   /* ─────────────────────────────────────────
-     Chart 1 — Pythagorean geometry Constraint (V = 1 - m^2)
+     Chart 1 - Pythagorean geometry Constraint (V = 1 - m^2)
   ───────────────────────────────────────── */
   const N = 100;
   const sigSqVals = Array.from({ length: N }, (_, i) => i / (N - 1));
@@ -560,7 +560,7 @@
   });
 
   /* ─────────────────────────────────────────
-     Chart 2 — NtM vs NtM + SINK-V Update Scaling (atan2)
+     Chart 2 - NtM vs NtM + SINK-V Update Scaling (atan2)
   ───────────────────────────────────────── */
   const mVals = Array.from({ length: N }, (_, i) => i / (N - 1)); // m ranges from 0 to 1
 
