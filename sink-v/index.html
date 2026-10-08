@@ -428,10 +428,6 @@
 <section id="algo">
   <h2><span class="sn">§ 4</span> The Implementation</h2>
 
-  <p>In standard adaptive optimizers like Adam, the update is computed using simple division: $\mathbf{m} / \sqrt{v}$. This division is notoriously unstable when variance approaches zero, requiring hyperparameter tuning of a small $\epsilon$ denominator to prevent explosion.</p>
-
-  <p>In SINK-V, we replace division entirely with the 2-argument arctangent: $\text{atan2}(\mathbf{m}, \sqrt{v})$. Because $\mathbf{m}$ and $v$ are geometrically strictly bound, $\text{atan2}$ cleanly scales confident signals while bounding the raw maximum step mathematically to $\pm \pi/2$. By multiplying the output by $4/\pi$, we map the effective update perfectly to a bounded $[-2, 2]$ range. This guarantees absolute numerical stability-zero division errors, and no $\epsilon$ tuning</p>
-
   <div class="algo-box">
     <div class="algo-head">Algorithm - Full NtM + SINK-V Optimizer Step</div>
     <div class="algo-body">
