@@ -412,13 +412,13 @@
 
   <div class="chart-wrap">
     <div class="chart-title">Fig. 1 - Geometric Constraint</div>
-    <div class="chart-sub">Because Total Energy (RMS) is bounded to 1.0, as the Signal (Momentum squared) increases, Variance must decrease exactly proportionally.</div>
+    <div class="chart-sub">Because Total Energy (RMS) is bounded to 1.0, as the Signal (Momentum squared) increases, Variance must decrease proportionally.</div>
     <div class="chart-canvas"><canvas id="chart-pythagoras"></canvas></div>
   </div>
 
   <div class="chart-wrap">
     <div class="chart-title">Fig. 2 - Update Magnitude Scaling & atan2 Bounding</div>
-    <div class="chart-sub">Comparing Pure NtM vs. SINK-V Preconditioning. Using <code>atan2</code> with the $4/\pi$ multiplier safely non-linearizes the update, bounding max output exactly to $[-2, 2]$.</div>
+    <div class="chart-sub">Comparing Pure NtM vs. SINK-V Preconditioning. Using <code>atan2</code> with the $4/\pi$ multiplier safely non-linearizes the update, bounding max output to $[-2, 2]$.</div>
     <div class="chart-canvas"><canvas id="chart-scaling"></canvas></div>
   </div>
 
@@ -444,7 +444,7 @@
       <br>
       <div><span class="c">// 4. Apply geometrically bounded variance preconditioning</span></div>
       <div><span class="c">// We replace standard division (m / sqrt(v)) with atan2.</span></div>
-      <div><span class="c">// Multiplying by 4/pi scales the maximum update exactly to [-2, 2].</span></div>
+      <div><span class="c">// Multiplying by 4/pi scales the maximum update to [-2, 2].</span></div>
       <div>denom = torch.sqrt(vt_row.view(-1, 1) * vt_col.view(1, -1))</div>
       <div>update = torch.atan2(m_t, denom).mul_(<span class="kw">4</span> / math.pi)</div>
       <br>
